@@ -19,7 +19,6 @@ st.markdown("""
     .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
-    .metric-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 15px; border-radius: 8px; text-align: center; }
     .stTabs [data-baseweb="tab-list"] { gap: 6px; }
     .stTabs [data-baseweb="tab"] { height: 45px; white-space: pre-wrap; font-weight: 600; font-size: 0.9rem; }
     </style>
@@ -89,7 +88,7 @@ tab1, tab2, tab3 = st.tabs([
 
 with tab1:
     st.subheader("1. Ingested Master Sheets Inspector (Multi-Select View)")
-    st.markdown("Select multiple sheets below to view and compare them concurrently side-by-side or stacked.")
+    st.markdown("Select multiple sheets below to view and compare them concurrently.")
     
     selected_sheets_to_view = st.multiselect(
         "Select Sheets to Inspect:",
@@ -98,11 +97,18 @@ with tab1:
     )
     
     if selected_sheets_to_view:
-        cols_layout = st.columns(len(selected_sheets_to_view)) if len(selected_sheets_to_view) <= 2 else [st.container()]
-        
+        # Safe Column Layout Allocation
+        num_selected = len(selected_sheets_to_view)
+        if num_selected == 2:
+            cols_layout = st.columns(2)
+        elif num_selected == 3:
+            cols_layout = st.columns(3)
+        else:
+            cols_layout = None
+
         for idx, s_key in enumerate(selected_sheets_to_view):
-            target_col = cols_layout[idx] if isinstance(cols_layout, list) else st.container()
-            with target_col:
+            target_container = cols_layout[idx] if cols_layout is not None else st.container()
+            with target_container:
                 st.markdown(f"##### 📑 Sheet Domain: `{s_key}`")
                 st.caption(f"Total Rows: {len(sheets[s_key])} | Columns: {len(sheets[s_key].columns)}")
                 st.data_editor(sheets[s_key], num_rows="dynamic", use_container_width=True, key=f"inspect_{s_key}_{idx}")
