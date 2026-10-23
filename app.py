@@ -12,7 +12,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Executive Burgundy Theme Styling
 st.markdown("""
     <style>
     .main-header { font-size: 2.2rem; font-weight: 800; color: #800020; letter-spacing: -0.5px; }
@@ -20,7 +19,6 @@ st.markdown("""
     .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
-    .metric-card { background-color: #F1F5F9; border: 1px solid #E2E8F0; padding: 15px; border-radius: 8px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -43,7 +41,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Multi-Document Ingestion, Granular Deposit & Digital Channel Summaries, Linked Narrative Reports & PPT Outlines</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Strict Schema Ingestion, Zero-Fabrication Enforcement, Linked Summaries & Reports</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -59,7 +57,7 @@ uploaded_files = st.sidebar.file_uploader(
 institution_label = st.sidebar.text_input("Institution Name / Title", value="Commercial Financial Institution")
 reporting_period = st.sidebar.selectbox("Reporting Period", ["Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-# Multi-Document Ingestion and Consolidation
+# Multi-Document Ingestion
 if uploaded_files:
     try:
         dfs = []
@@ -77,11 +75,11 @@ else:
     raw_df = None
 
 if raw_df is None or raw_df.empty:
-    st.info("👆 Upload your master branch files, digital channel reports, and deposit spreadsheets using the sidebar to generate linked summaries.")
+    st.info("👆 Upload your master branch files using the sidebar to generate verified summaries.")
     st.stop()
 
 # ==========================================
-# 2. INTELLIGENT MULTI-VARIABLE MAPPING ENGINE
+# 2. STRICT MAPPING (NO FABRICATED NUMBERS)
 # ==========================================
 cols = raw_df.columns.tolist()
 
@@ -112,29 +110,31 @@ c_school = find_header(["school", "education"])
 c_agent = find_header(["agent", "digital agent", "banking"])
 
 df = raw_df.copy()
-df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else [f"BR-{i:03d}" for i in range(1, len(raw_df)+1)]
-df["__BranchName"] = raw_df[c_name].astype(str) if c_name else [f"Branch_{i:02d}" for i in range(1, len(raw_df)+1)]
-df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "City"
-df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Central District"
-df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(10.0) if c_m_plan else 10.0
-df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(5.0) if c_m_actual else 5.0
-df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(30.0) if c_q_plan else 30.0
-df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(25.0) if c_q_actual else 25.0
-df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(100.0) if c_pos_start else 100.0
-df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(120.0) if c_pos_end else 120.0
-df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "Saving Account"
+df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else "N/A"
+df["__BranchName"] = raw_df[c_name].astype(str) if c_name else "N/A"
+df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "Unspecified"
+df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Unspecified"
 
-# Digital Channel Metrics
-df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(1200) if c_mob else 1200
-df["__ATMUsers"] = pd.to_numeric(raw_df[c_atm], errors="coerce").fillna(450) if c_atm else 450
-df["__POSMerchant"] = pd.to_numeric(raw_df[c_pos_m], errors="coerce").fillna(85) if c_pos_m else 85
-df["__POSDeployed"] = pd.to_numeric(raw_df[c_pos_d], errors="coerce").fillna(90) if c_pos_d else 90
-df["__QRMerchant"] = pd.to_numeric(raw_df[c_qr_m], errors="coerce").fillna(150) if c_qr_m else 150
-df["__QRDeployed"] = pd.to_numeric(raw_df[c_qr_d], errors="coerce").fillna(160) if c_qr_d else 160
-df["__SchoolSys"] = pd.to_numeric(raw_df[c_school], errors="coerce").fillna(3) if c_school else 3
-df["__AgentBanking"] = pd.to_numeric(raw_df[c_agent], errors="coerce").fillna(25) if c_agent else 25
+# 숫자 데이터는 엑셀에 값이 없으면 0으로 처리 (허위 임의값 주입 원천 차단)
+df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(0) if c_m_plan else 0.0
+df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(0) if c_m_actual else 0.0
+df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(0) if c_q_plan else 0.0
+df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(0) if c_q_actual else 0.0
+df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(0) if c_pos_start else 0.0
+df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(0) if c_pos_end else 0.0
+df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General"
 
-# Performance Calculations
+# 디지털 및 부가 채널 지표 (파일에 열이 없거나 비어 있으면 정확히 0으로 반영)
+df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(0) if c_mob else 0
+df["__ATMUsers"] = pd.to_numeric(raw_df[c_atm], errors="coerce").fillna(0) if c_atm else 0
+df["__POSMerchant"] = pd.to_numeric(raw_df[c_pos_m], errors="coerce").fillna(0) if c_pos_m else 0
+df["__POSDeployed"] = pd.to_numeric(raw_df[c_pos_d], errors="coerce").fillna(0) if c_pos_d else 0
+df["__QRMerchant"] = pd.to_numeric(raw_df[c_qr_m], errors="coerce").fillna(0) if c_qr_m else 0
+df["__QRDeployed"] = pd.to_numeric(raw_df[c_qr_d], errors="coerce").fillna(0) if c_qr_d else 0
+df["__SchoolSys"] = pd.to_numeric(raw_df[c_school], errors="coerce").fillna(0) if c_school else 0
+df["__AgentBanking"] = pd.to_numeric(raw_df[c_agent], errors="coerce").fillna(0) if c_agent else 0
+
+# 성과 계산
 df["Monthly Ach (%)"] = ((df["__MonthlyActual"] / df["__MonthlyPlan"].replace(0, np.nan)) * 100).fillna(0).round(1)
 df["Q1 Ach (%)"] = ((df["__Q1Actual"] / df["__Q1Plan"].replace(0, np.nan)) * 100).fillna(0).round(1)
 df["Growth From Prior (%)"] = (((df["__PosEnd"] - df["__PosStart"]) / df["__PosStart"].replace(0, np.nan)) * 100).fillna(0).round(1)
@@ -144,7 +144,7 @@ total_prior = df["__PosStart"].sum()
 overall_growth = ((total_portfolio - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
 
 # ==========================================
-# 3. EXECUTIVE TABS & DETAILED SUMMARIES
+# 3. EXECUTIVE TABS & SUMMARIES
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏛️ District & Location Summary", 
@@ -175,7 +175,7 @@ with tab1:
     st.data_editor(district_summary, num_rows="dynamic", use_container_width=True, key="dist_summary_t")
 
 with tab2:
-    st.subheader("2. Deposit Breakdown by Product Type (Saving, Demand, Fixed Time)")
+    st.subheader("2. Deposit Breakdown by Product Type")
     product_summary = df.groupby("__DepositType").agg(
         Branch_Count=("__BranchName", "count"),
         Position_Prior=("__PosStart", "sum"),
@@ -188,7 +188,7 @@ with tab2:
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
 with tab3:
-    st.subheader("3. Customer Base & Digital Channels Summary (Mobile, ATM, POS, QR)")
+    st.subheader("3. Customer Base & Digital Channels Summary")
     digital_chan_sum = df.groupby(["__District", "__Location"]).agg(
         Active_Branches=("__BranchName", "count"),
         Mobile_Banking_Users=("__MobileUsers", "sum"),
@@ -253,7 +253,7 @@ SLIDE 2: DEPOSIT BREAKDOWN BY PRODUCT TYPE
 - Product Portfolio Mix: Saving Accounts, Demand Deposits, and Fixed Time Deposits.
 - Leading Performance District: {top_district}.
 
-SLIDE 3: DIGITAL BANKING & MERCHANT ECOSYSTEM
+SLIDE 3: DIGITAL CHANNEL & MERCHANT ECOSYSTEM
 - Mobile Banking Active Users: {total_mobile:,.0f}
 - POS Deployed: {total_pos:,.0f} Units | QR Merchant Points: {total_qr:,.0f} Deployed
 - Agent Banking Network: {total_agents:,.0f} Active Outlets
