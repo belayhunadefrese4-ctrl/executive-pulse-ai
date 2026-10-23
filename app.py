@@ -43,24 +43,22 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Commercial Banking Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Dynamic Schema Ingestion, Balance Sheet Analytics, Auto-Adapting Templates & Data Wipe Controls</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Self-Healing Schema Adaptation, Dynamic Column Preservation & Balance Sheet Analytics</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ AIR-GAPPED SECURE</span>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ==========================================
-# 2. DYNAMIC FILE INGESTION & DATA WIPE CONTROLS
+# 2. DYNAMIC FILE INGESTION & SELF-HEALING ENGINE
 # ==========================================
 st.sidebar.header("📥 Multi-Department Ingestion & Controls")
 
 uploaded_file = st.sidebar.file_uploader("Upload Raw Department Excel/CSV", type=["xlsx", "csv"], key="bank_file_uploader")
 
-# Session State for File Data Management
 if "file_cleared" not in st.session_state:
     st.session_state.file_cleared = False
 
-# Reset Session Button (Temporary Wipe)
 if uploaded_file is not None:
     if st.sidebar.button("🗑️ Clear Uploaded File (Temporary Reset)"):
         st.session_state.file_cleared = True
@@ -94,14 +92,13 @@ def generate_master_bank_dataset():
         target = cur_bal * random.uniform(1.05, 1.30)
         
         rows.append({
-            "Branch Location": f"Branch_{i:02d}",
+            "Branch Code": f"BR-{i:03d}",
+            "Branch Name": f"Branch_{i:02d}",
             "District": dist,
             "Directorate": direct,
-            "Saving Type": sav,
-            "Customer Segment": seg,
-            "Current Portfolio Balance (ETB)": cur_bal,
-            "Prior Portfolio Balance (ETB)": prior_bal,
-            "Target Portfolio (ETB)": target,
+            "Position as of 30 Jun 2026": cur_bal,
+            "Monthly Actual": prior_bal,
+            "Monthly Plan": target,
             "Active Accounts": acc,
             "Non-Performing Loans (NPL ETB)": npl,
             "Operating Expense (ETB)": cur_bal * 0.025,
@@ -109,88 +106,65 @@ def generate_master_bank_dataset():
         })
     return pd.DataFrame(rows)
 
-# Dynamic Schema Resolver
-def normalize_and_adapt_schema(input_df):
-    """Auto-adapts uploaded spreadsheets with missing or alternative headers."""
-    col_mapping = {}
-    for col in input_df.columns:
-        c_lower = str(col).lower()
-        if "branch" in c_lower or "location" in c_lower:
-            col_mapping[col] = "Branch Location"
-        elif "district" in c_lower or "region" in c_lower:
-            col_mapping[col] = "District"
-        elif "directorate" in c_lower or "department" in c_lower:
-            col_mapping[col] = "Directorate"
-        elif "saving" in c_lower or "deposit type" in c_lower:
-            col_mapping[col] = "Saving Type"
-        elif "segment" in c_lower:
-            col_mapping[col] = "Customer Segment"
-        elif "current" in c_lower or "balance" in c_lower or "portfolio" in c_lower:
-            if "prior" not in c_lower and "target" not in c_lower:
-                col_mapping[col] = "Current Portfolio Balance (ETB)"
-        elif "prior" in c_lower or "previous" in c_lower:
-            col_mapping[col] = "Prior Portfolio Balance (ETB)"
-        elif "target" in c_lower or "budget" in c_lower:
-            col_mapping[col] = "Target Portfolio (ETB)"
-        elif "npl" in c_lower or "non-performing" in c_lower:
-            col_mapping[col] = "Non-Performing Loans (NPL ETB)"
-            
-    adapted_df = input_df.rename(columns=col_mapping)
+def self_heal_and_adapt_schema(input_df):
+    """Cleans broken/unwell formatted data and auto-maps columns while preserving user headings."""
+    # Drop completely empty rows and columns
+    input_df = input_df.dropna(how='all').dropna(axis=1, how='all')
+    input_df.columns = [str(c).strip() for c in input_df.columns]
     
-    # Fill in missing required columns dynamically
-    if "Branch Location" not in adapted_df.columns:
-        adapted_df["Branch Location"] = [f"Branch_{i:02d}" for i in range(1, len(adapted_df)+1)]
-    if "District" not in adapted_df.columns:
-        adapted_df["District"] = "Central District"
-    if "Directorate" not in adapted_df.columns:
-        adapted_df["Directorate"] = "Retail Banking"
-    if "Current Portfolio Balance (ETB)" not in adapted_df.columns:
-        numeric_cols = adapted_df.select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) > 0:
-            adapted_df["Current Portfolio Balance (ETB)"] = adapted_df[numeric_cols[0]]
-        else:
-            adapted_df["Current Portfolio Balance (ETB)"] = 50000000.0
-            
-    if "Prior Portfolio Balance (ETB)" not in adapted_df.columns:
-        adapted_df["Prior Portfolio Balance (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.92
-    if "Target Portfolio (ETB)" not in adapted_df.columns:
-        adapted_df["Target Portfolio (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 1.15
-    if "Non-Performing Loans (NPL ETB)" not in adapted_df.columns:
-        adapted_df["Non-Performing Loans (NPL ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.03
-    if "Active Accounts" not in adapted_df.columns:
-        adapted_df["Active Accounts"] = 5000
-    if "Operating Expense (ETB)" not in adapted_df.columns:
-        adapted_df["Operating Expense (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.02
-    if "Operating Income (ETB)" not in adapted_df.columns:
-        adapted_df["Operating Income (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.08
-        
-    # Clean numeric columns to eliminate NaN/nulls
-    num_fields = [
-        "Current Portfolio Balance (ETB)", "Prior Portfolio Balance (ETB)",
-        "Target Portfolio (ETB)", "Non-Performing Loans (NPL ETB)",
-        "Active Accounts", "Operating Expense (ETB)", "Operating Income (ETB)"
-    ]
-    for field in num_fields:
-        if field in adapted_df.columns:
-            adapted_df[field] = pd.to_numeric(adapted_df[field], errors="coerce").fillna(0)
+    # Identify key semantic columns dynamically based on keywords in user headers
+    cur_col, prior_col, target_col, district_col, branch_col, npl_col = None, None, None, None, None, None
+    
+    for col in input_df.columns:
+        cl = col.lower()
+        if any(k in cl for k in ["position", "current", "balance", "actual", "jun", "dec", "quarterly"]) and not cur_col:
+            if "plan" not in cl and "prior" not in cl:
+                cur_col = col
+        if any(k in cl for k in ["prior", "previous", "monthly actual", "last"]):
+            prior_col = col
+        if any(k in cl for k in ["plan", "target", "budget", "monthly plan", "q1 plan"]):
+            if not target_col:
+                target_col = col
+        if any(k in cl for k in ["district", "region", "area", "location"]):
+            district_col = col
+        if any(k in cl for k in ["branch", "name", "code", "unit"]):
+            if not branch_col:
+                branch_col = col
+        if any(k in cl for k in ["npl", "non-performing", "default", "risk"]):
+            npl_col = col
 
-    return adapted_df
+    # Assign computational mapping aliases while retaining original user headers
+    adapted = input_df.copy()
+    
+    # Set fallback computational columns for engine math
+    adapted["__Cur_Balance"] = pd.to_numeric(adapted[cur_col], errors="coerce").fillna(0) if cur_col else 50000000.0
+    adapted["__Prior_Balance"] = pd.to_numeric(adapted[prior_col], errors="coerce").fillna(adapted["__Cur_Balance"] * 0.92) if prior_col else adapted["__Cur_Balance"] * 0.92
+    adapted["__Target_Balance"] = pd.to_numeric(adapted[target_col], errors="coerce").fillna(adapted["__Cur_Balance"] * 1.15) if target_col else adapted["__Cur_Balance"] * 1.15
+    adapted["__District"] = adapted[district_col].astype(str) if district_col else "Central District"
+    adapted["__Branch"] = adapted[branch_col].astype(str) if branch_col else [f"Branch_{i:02d}" for i in range(1, len(adapted)+1)]
+    adapted["__Directorate"] = "Retail Banking"
+    adapted["__NPL"] = pd.to_numeric(adapted[npl_col], errors="coerce").fillna(adapted["__Cur_Balance"] * 0.03) if npl_col else adapted["__Cur_Balance"] * 0.03
+    adapted["__Active_Accounts"] = 5000
+    adapted["__Op_Expense"] = adapted["__Cur_Balance"] * 0.02
+    adapted["__Op_Income"] = adapted["__Cur_Balance"] * 0.08
+
+    return adapted, input_df
 
 # Load & Process Data
 if uploaded_file is not None and not st.session_state.file_cleared:
     try:
         raw_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        df = normalize_and_adapt_schema(raw_df)
-        st.sidebar.success("✅ File Ingested & Schema Auto-Adapted!")
+        df, original_user_df = self_heal_and_adapt_schema(raw_df)
+        st.sidebar.success("✅ File Ingested & Self-Healed Successfully!")
     except Exception as e:
         st.sidebar.error(f"Error loading file: {e}")
-        df = generate_master_bank_dataset()
+        df, original_user_df = self_heal_and_adapt_schema(generate_master_bank_dataset())
 else:
-    df = generate_master_bank_dataset()
+    df, original_user_df = self_heal_and_adapt_schema(generate_master_bank_dataset())
 
-# Calculate Portfolio Growth safely
-prior_denom = df["Prior Portfolio Balance (ETB)"].replace(0, np.nan)
-df["Portfolio Growth (%)"] = (((df["Current Portfolio Balance (ETB)"] - df["Prior Portfolio Balance (ETB)"]) / prior_denom) * 100).fillna(0).round(2)
+# Calculate Growth
+prior_denom = df["__Prior_Balance"].replace(0, np.nan)
+df["Portfolio Growth (%)"] = (((df["__Cur_Balance"] - df["__Prior_Balance"]) / prior_denom) * 100).fillna(0).round(2)
 
 # ==========================================
 # 3. BALANCE SHEET & CAPITAL EVALUATION
@@ -207,7 +181,6 @@ with b_col3:
 with b_col4:
     rwa = st.number_input("Risk-Weighted Assets (RWA ETB)", min_value=1.0, value=38000000000.0, step=1000000000.0)
 
-# Dynamic Variable Injection
 st.subheader("➕ Dynamic Shock Variables & Variable Customization")
 e_col1, e_col2, e_col3 = st.columns(3)
 with e_col1:
@@ -224,21 +197,20 @@ st.markdown("---")
 st.header("📊 2. Corporate Performance & CAMELS Soundness Rating")
 
 car = ((tier1_capital + tier2_capital) / rwa) * 100.0
-total_cur_portfolio = df["Current Portfolio Balance (ETB)"].sum()
-total_prior_portfolio = df["Prior Portfolio Balance (ETB)"].sum()
+total_cur_portfolio = df["__Cur_Balance"].sum()
+total_prior_portfolio = df["__Prior_Balance"].sum()
 portfolio_growth_yoy = ((total_cur_portfolio - total_prior_portfolio) / total_prior_portfolio * 100) if total_prior_portfolio > 0 else 0.0
 
-total_npl = df["Non-Performing Loans (NPL ETB)"].sum() + (total_cur_portfolio * (npl_provision_buffer / 100.0))
+total_npl = df["__NPL"].sum() + (total_cur_portfolio * (npl_provision_buffer / 100.0))
 overall_npl_ratio = (total_npl / total_cur_portfolio) * 100.0 if total_cur_portfolio > 0 else 0.0
 
-total_opinc = df["Operating Income (ETB)"].sum()
-total_opex = df["Operating Expense (ETB)"].sum() + opex_shock
+total_opinc = df["__Op_Income"].sum()
+total_opex = df["__Op_Expense"].sum() + opex_shock
 cir = (total_opex / total_opinc) * 100.0 if total_opinc > 0 else 0.0
 
 nim = ((total_opinc - total_opex) / earning_assets) * 100.0
 roe = ((total_opinc - total_opex) / (tier1_capital + tier2_capital)) * 100.0
 
-# CAMELS Score Logic
 if car >= 12.0 and overall_npl_ratio <= 5.0 and cir <= 50.0:
     camels_grade = "1 - STRONG (Grade A Soundness)"
 elif car >= 10.0 and overall_npl_ratio <= 8.0:
@@ -264,19 +236,18 @@ with k5:
 st.markdown("---")
 st.header("🎯 3. Directorate BSC Evaluation & Strategy Realization")
 
-dir_summary = df.groupby("Directorate").agg({
-    "Current Portfolio Balance (ETB)": "sum",
-    "Target Portfolio (ETB)": "sum",
-    "Active Accounts": "sum",
-    "Non-Performing Loans (NPL ETB)": "sum"
-}).reset_index()
+dir_summary = df.groupby("__Directorate").agg({
+    "__Cur_Balance": "sum",
+    "__Target_Balance": "sum",
+    "__Active_Accounts": "sum",
+    "__NPL": "sum"
+}).reset_index().rename(columns={"__Directorate": "Directorate", "__Cur_Balance": "Current Portfolio Balance (ETB)", "__Target_Balance": "Target Portfolio (ETB)"})
 
 target_denom = dir_summary["Target Portfolio (ETB)"].replace(0, np.nan)
 dir_summary["Target Achievement (%)"] = pd.to_numeric(
     (dir_summary["Current Portfolio Balance (ETB)"] / target_denom * 100), errors="coerce"
 ).fillna(0).round(2)
 
-# SAFE RANKING: Fills NaNs before integer casting to prevent IntCastingNaError
 dir_summary["BSC Rank"] = dir_summary["Target Achievement (%)"].rank(ascending=False, method="min").fillna(1).astype(int)
 dir_summary = dir_summary.sort_values(by="BSC Rank")
 
@@ -294,71 +265,55 @@ with m_col1:
 with m_col2:
     st.markdown("#### Directorate BSC Performance Table")
     selected_cols = st.multiselect(
-        "Customize Table Headings (Add/Delete Columns from View):",
+        "Customize Table Headings:",
         options=list(dir_summary.columns),
         default=["BSC Rank", "Directorate", "Current Portfolio Balance (ETB)", "Target Portfolio (ETB)", "Target Achievement (%)"]
     )
-    # Allows full cell editing, row adding (+), and row deleting dynamically
     st.data_editor(dir_summary[selected_cols], num_rows="dynamic", use_container_width=True, key="directorate_editor")
 
 # ==========================================
-# 6. BRANCH RANKINGS & AUTOMATED ACTION PLANS
+# 6. BRANCH NETWORK ANALYTICS & INTERVENTIONS
 # ==========================================
 st.markdown("---")
 st.header("🏆 4. Branch Network Analytics & Intervention Action Plans")
 
-branch_agg = df.groupby(["Branch Location", "District"]).agg({
-    "Current Portfolio Balance (ETB)": "sum",
-    "Prior Portfolio Balance (ETB)": "sum",
-    "Active Accounts": "sum",
-    "Non-Performing Loans (NPL ETB)": "sum"
-}).reset_index()
+branch_agg = df.copy()
+branch_agg["Branch Location"] = branch_agg["__Branch"]
+branch_agg["District"] = branch_agg["__District"]
+branch_agg["Current Balance"] = branch_agg["__Cur_Balance"]
+branch_agg["Growth (%)"] = branch_agg["Portfolio Growth (%)"]
+branch_agg["NPL Ratio (%)"] = ((branch_agg["__NPL"] / branch_agg["__Cur_Balance"].replace(0, np.nan)) * 100).fillna(0).round(2)
 
-cur_denom = branch_agg["Current Portfolio Balance (ETB)"].replace(0, np.nan)
-prior_branch_denom = branch_agg["Prior Portfolio Balance (ETB)"].replace(0, np.nan)
-
-branch_agg["NPL Ratio (%)"] = ((branch_agg["Non-Performing Loans (NPL ETB)"] / cur_denom) * 100).fillna(0).round(2)
-branch_agg["Growth (%)"] = (((branch_agg["Current Portfolio Balance (ETB)"] - branch_agg["Prior Portfolio Balance (ETB)"]) / prior_branch_denom) * 100).fillna(0).round(2)
-
-sorted_branches = branch_agg.sort_values(by="Current Portfolio Balance (ETB)", ascending=False)
+sorted_branches = branch_agg.sort_values(by="Current Balance", ascending=False)
 top_10 = sorted_branches.head(10)
-least_10 = sorted_branches.tail(10).sort_values(by="Current Portfolio Balance (ETB)", ascending=True)
+least_10 = sorted_branches.tail(10).sort_values(by="Current Balance", ascending=True)
 
-r_tab1, r_tab2, r_tab3 = st.tabs(["Top 10 Best-Performing Branches", "Least 10 Performing Branches (Watchlist)", "Automated Intervention Action Plans"])
+r_tab1, r_tab2, r_tab3 = st.tabs(["Top 10 Best-Performing Branches (Original User Headings)", "Least 10 Performing Branches (Watchlist)", "Automated Intervention Action Plans"])
 
 with r_tab1:
-    st.subheader("🌟 Top 10 Best-Performing Branches")
-    st.data_editor(
-        top_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]],
-        num_rows="dynamic",
-        use_container_width=True,
-        key="top_10_editor"
-    )
+    st.subheader("🌟 Top 10 Best-Performing Branches (Showing Your Excel Columns & Headings)")
+    # Displays the exact user headers from the uploaded Excel file dynamically
+    st.data_editor(original_user_df.head(10), num_rows="dynamic", use_container_width=True, key="top_10_user_editor")
 
 with r_tab2:
     st.subheader("⚠️ Least 10 Performing Branches (Watchlist)")
-    st.data_editor(
-        least_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]],
-        num_rows="dynamic",
-        use_container_width=True,
-        key="least_10_editor"
-    )
+    st.data_editor(original_user_df.tail(10), num_rows="dynamic", use_container_width=True, key="least_10_user_editor")
 
 with r_tab3:
     st.subheader("🛠️ Automated Action Plans for Watchlist Locations")
     for idx, row in least_10.iterrows():
-        b_name = row["Branch Location"]
-        b_dist = row["District"]
-        b_npl = row["NPL Ratio (%)"]
-        b_growth = row["Growth (%)"]
+        b_name = row["__Branch"]
+        b_dist = row["__District"]
+        b_npl_val = row["NPL Ratio (%)"]
+        b_growth_val = row["Growth (%)"]
         
         st.markdown(f"""
         <div class="action-card">
-            <strong>📍 {b_name} ({b_dist} District)</strong> | Portfolio: {row['Current Portfolio Balance (ETB)']:,.0f} ETB | Growth: {b_growth:+.2f}% | NPL Ratio: {b_npl:.2f}%<br>
+            <strong>📍 {b_name} ({b_dist} District)</strong> | Balance: {row['__Cur_Balance']:,.0f} ETB | Growth: {b_growth_val:+.2f}% | NPL Ratio: {b_npl_val:.2f}%<br>
             <em>Executive Action Required:</em>
             <ul>
-                {"<li><strong>Credit Audit Taskforce:</strong> Immediate NPL collection protocol required due to credit risk > 5%.</li>" if b_npl > 5.0 else "<li><strong>Deposit Mobilization Campaign:</strong> Target local SMEs and retail accounts to expand deposit portfolio.</li>"}
-                {"<li><strong>Liquidity Restructuring:</strong> Review local interest rate offerings to halt balance decline.</li>" if b_growth < 0 else "<li><strong>Digital Adoption Push:</strong> Enroll customers into mobile/internet banking to reduce overhead costs.</li>"}
+                {"<li><strong>Credit Audit Taskforce:</strong> Immediate NPL collection protocol required due to credit risk > 5%.</li>" if b_npl_val > 5.0 else "<li><strong>Deposit Mobilization Campaign:</strong> Target local SMEs and retail accounts to expand deposit portfolio.</li>"}
+                {"<li><strong>Liquidity Restructuring:</strong> Review local interest rate offerings to halt balance decline.</li>" if b_growth_val < 0 else "<li><strong>Digital Adoption Push:</strong> Enroll customers into mobile/internet banking to reduce overhead costs.</li>"}
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -376,10 +331,10 @@ top_dir_ach = dir_summary.iloc[0]['Target Achievement (%)'] if len(dir_summary) 
 strat_dir_name = dir_summary.iloc[-1]['Directorate'] if len(dir_summary) > 0 else "N/A"
 strat_dir_ach = dir_summary.iloc[-1]['Target Achievement (%)'] if len(dir_summary) > 0 else 0.0
 
-top_branch_name = top_10.iloc[0]['Branch Location'] if len(top_10) > 0 else "N/A"
-top_branch_dist = top_10.iloc[0]['District'] if len(top_10) > 0 else "N/A"
-watch_branch_name = least_10.iloc[0]['Branch Location'] if len(least_10) > 0 else "N/A"
-watch_branch_dist = least_10.iloc[0]['District'] if len(least_10) > 0 else "N/A"
+top_branch_name = top_10.iloc[0]['__Branch'] if len(top_10) > 0 else "N/A"
+top_branch_dist = top_10.iloc[0]['__District'] if len(top_10) > 0 else "N/A"
+watch_branch_name = least_10.iloc[0]['__Branch'] if len(least_10) > 0 else "N/A"
+watch_branch_dist = least_10.iloc[0]['__District'] if len(least_10) > 0 else "N/A"
 
 with ex_tab1:
     st.subheader("📄 Boardroom Performance Report")
@@ -437,11 +392,10 @@ with ex_tab3:
     st.subheader("📥 Export Master Excel Workbook")
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='Raw_Bank_Data', index=False)
+        original_user_df.to_excel(writer, sheet_name='Uploaded_Raw_Data', index=False)
         dir_summary.to_excel(writer, sheet_name='Directorate_BSC', index=False)
-        top_10.to_excel(writer, sheet_name='Top_10_Branches', index=False)
+        top_10.to_excel(writer, sheet_name='Top_Branches', index=False)
         least_10.to_excel(writer, sheet_name='Watchlist_Branches', index=False)
-        branch_agg.to_excel(writer, sheet_name='All_Branch_Analytics', index=False)
     
     st.download_button(
         label="📥 Download Master Excel Report (.xlsx)",
