@@ -19,6 +19,7 @@ st.markdown("""
     .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
+    .metric-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 15px; border-radius: 8px; text-align: center; }
     .stTabs [data-baseweb="tab-list"] { gap: 6px; }
     .stTabs [data-baseweb="tab"] { height: 45px; white-space: pre-wrap; font-weight: 600; font-size: 0.9rem; }
     </style>
@@ -41,12 +42,12 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & MULTI-FILE INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-File & Multi-Sheet Ingestion Hub with Concurrent Inspection</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-File Ingestion Hub, Concurrent Sheet Inspector & Executive Summaries</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Multi-File Ingestion Hub")
 uploaded_files = st.sidebar.file_uploader(
-    "Upload Multiple Excel/CSV Files", 
+    "Upload Multiple Excel/CSV Files (e.g. ATM, Mobile Bank)", 
     type=["xlsx", "csv"], 
     accept_multiple_files=True
 )
@@ -66,27 +67,24 @@ if uploaded_files:
                 for s_name in xls.sheet_names:
                     s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
                     s_df.columns = [str(c).strip() for c in s_df.columns]
-                    sheet_key = f"{file_prefix} -> {s_name}" if len(xls.sheet_names) > 1 else file_prefix
+                    sheet_key = f"{file_prefix} - {s_name}" if len(xls.sheet_names) > 1 else file_prefix
                     sheets[sheet_key] = s_df
-        st.sidebar.success(f"✅ Successfully Loaded {len(uploaded_files)} File(s) | {len(sheets)} Total Sheet Domain(s)")
+        st.sidebar.success(f"✅ Successfully Loaded {len(uploaded_files)} File(s) | {len(sheets)} Total Domain Sheet(s)")
     except Exception as e:
         st.sidebar.error(f"Error reading files: {e}")
         sheets = {}
 
 if not sheets:
-    st.info("👆 Please upload one or more master bank Excel or CSV files using the sidebar multi-file uploader.")
+    st.info("👆 Please upload your master files (e.g., ATM, Mobile Bank spreadsheets) using the sidebar uploader.")
     st.stop()
 
-# Combine for overall metrics calculation
-combined_master = pd.concat(sheets.values(), ignore_index=True) if sheets else pd.DataFrame()
-
 # ==========================================
-# 2. EXECUTIVE TABS & MULTI-SELECT INSPECTOR
+# 2. EXECUTIVE TABS & CONCURRENT INSPECTOR
 # ==========================================
 tab1, tab2, tab3 = st.tabs([
     "📊 Multi-Sheet Inspector", 
-    "📄 Narrative & PPT",
-    "📥 Download Package"
+    "📄 Executive Summary & PPT",
+    "📥 Download Consolidated Package"
 ])
 
 with tab1:
@@ -96,38 +94,44 @@ with tab1:
     selected_sheets_to_view = st.multiselect(
         "Select Sheets to Inspect:",
         options=list(sheets.keys()),
-        default=list(sheets.keys())[:1] if sheets else []
+        default=list(sheets.keys())[:2] if len(sheets) >= 2 else list(sheets.keys())
     )
     
     if selected_sheets_to_view:
-        for s_key in selected_sheets_to_view:
-            st.markdown(f"##### 📑 Sheet Domain: `{s_key}` ({len(sheets[s_key])} rows)")
-            st.data_editor(sheets[s_key], num_rows="dynamic", use_container_width=True, key=f"inspect_{s_key}")
-            st.markdown("---")
+        cols_layout = st.columns(len(selected_sheets_to_view)) if len(selected_sheets_to_view) <= 2 else [st.container()]
+        
+        for idx, s_key in enumerate(selected_sheets_to_view):
+            target_col = cols_layout[idx] if isinstance(cols_layout, list) else st.container()
+            with target_col:
+                st.markdown(f"##### 📑 Sheet Domain: `{s_key}`")
+                st.caption(f"Total Rows: {len(sheets[s_key])} | Columns: {len(sheets[s_key].columns)}")
+                st.data_editor(sheets[s_key], num_rows="dynamic", use_container_width=True, key=f"inspect_{s_key}_{idx}")
+                st.markdown("---")
     else:
         st.info("Please select at least one sheet above to display its contents.")
 
 with tab2:
-    st.subheader("2. Executive Narrative Report & Linked PPT Outline")
+    st.subheader("2. Executive Narrative Report & Boardroom PPT Outline")
     
-    total_rows = len(combined_master)
     total_sheets_count = len(sheets)
-    
+    total_records = sum(len(df) for df in sheets.values())
+    sheet_names_list = ", ".join(list(sheets.keys()))
+
     narrative_text = f"""
 ====================================================================================
-EXECUTIVE REPORT | PERIOD: {reporting_period}
+EXECUTIVE FINANCIAL & OPERATIONAL REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. MASTER DATA INTEGRITY & MULTI-FILE SCOPE
+1. INGESTION SCOPE & DOMAIN INTEGRITY
    ---------------------------------------------------------------------------------
-   • Total Ingested File Domains & Sheets: {total_sheets_count} active domains.
-   • Consolidated Records: {total_rows} total rows processed across multiple files.
-   • All original headings and domain categories are fully preserved from source documents.
+   • Total Ingested Domains / Sheets: {total_sheets_count} ({sheet_names_list})
+   • Consolidated Master Records: {total_records} total data points processed.
+   • Data structures and original headers are preserved without truncation.
 
-2. BOARDROOM SUMMARY
+2. OPERATIONAL SUMMARY
    ---------------------------------------------------------------------------------
-   • Multi-file and multi-sheet architecture maintains pristine separation across 
-     branch networks, deposit categories, digital channels, and specialized infrastructure.
+   • Multi-file ingestion successfully aggregates digital channels, ATM networks, 
+     and branch positions into a unified executive package.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI ENGINE
@@ -137,10 +141,10 @@ CERTIFIED BY EXECUTIVE PULSE AI ENGINE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
 - Reporting Period: {reporting_period}
-- Total Processed Records: {total_rows} Rows across {total_sheets_count} Domains/Sheets
+- Total Processed Records: {total_records} Rows across {total_sheets_count} Domains ({sheet_names_list})
 
-SLIDE 2: MULTI-FILE STRUCTURE
-- Concurrent multi-file ingestion for Branch Networks, Deposit Categories, and Digital Channels.
+SLIDE 2: MULTI-DOMAIN CHANNEL STRUCTURE
+- Consolidated tracking for ATM networks, Mobile Banking, and Branch infrastructure.
 """
 
     col_r1, col_r2 = st.columns(2)
@@ -152,8 +156,8 @@ SLIDE 2: MULTI-FILE STRUCTURE
         st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
 
 with tab3:
-    st.subheader("3. Multi-Sheet Excel Package Generator")
-    st.markdown("Download the fully structured, multi-sheet Excel package keeping all original master tables pristine.")
+    st.subheader("3. Consolidated Multi-Sheet Excel Package Generator")
+    st.markdown("Download the fully structured Excel package containing all separate domain sheets cleanly organized.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
