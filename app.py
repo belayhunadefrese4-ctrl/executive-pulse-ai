@@ -5,18 +5,18 @@ import io
 import random
 
 # ==========================================
-# PAGE CONFIGURATION & ENTERPRISE STYLING
+# PAGE CONFIGURATION & STYLING
 # ==========================================
 st.set_page_config(
-    page_title="Executive Pulse AI - Enterprise Banking & BSC Engine",
+    page_title="Executive Pulse AI - Commercial Banking Engine",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.markdown("""
     <style>
-    .main-header { font-size: 2.2rem; font-weight: 800; color: #0F172A; }
-    .sub-header { font-size: 1.05rem; color: #475569; }
+    .main-header { font-size: 2.1rem; font-weight: 800; color: #0F172A; }
+    .sub-header { font-size: 1.0rem; color: #475569; }
     .security-badge { background-color: #065F46; color: white; padding: 6px 12px; border-radius: 6px; font-weight: bold; }
     .action-card { background-color: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px; margin-bottom: 10px; border-radius: 4px; }
     .report-box { background-color: #FFFFFF; border: 1px solid #CBD5E1; padding: 25px; border-radius: 8px; font-family: 'Times New Roman', Times, serif; }
@@ -24,7 +24,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. SECURITY KEY AUTHENTICATION SYSTEM
+# 1. SECURITY KEY AUTHENTICATION
 # ==========================================
 MASTER_SECURITY_KEY = "BANK-EXEC-8899-SECURE"
 
@@ -38,22 +38,34 @@ if user_key != MASTER_SECURITY_KEY:
     st.stop()
 
 # ==========================================
-# APP HEADER (AUTHENTICATED)
+# APP HEADER
 # ==========================================
 col_title, col_sec = st.columns([3, 1])
 with col_title:
-    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Multi-Period Trend Analytics, BSC Strategy Realization, Automated PDF/Print Reporting & Intervention Action Plans</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Commercial Banking Engine</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Dynamic Schema Ingestion, Balance Sheet Analytics, Auto-Adapting Templates & Data Wipe Controls</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ AIR-GAPPED SECURE</span>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ==========================================
-# 2. MULTI-DEPARTMENT DATA INGESTION & PERIODS
+# 2. DYNAMIC FILE INGESTION & DATA WIPE CONTROLS
 # ==========================================
-st.sidebar.header("📥 Multi-Department Data Ingestion")
-uploaded_file = st.sidebar.file_uploader("Upload Raw Department Excel/CSV", type=["xlsx", "csv"])
+st.sidebar.header("📥 Multi-Department Ingestion & Controls")
+
+uploaded_file = st.sidebar.file_uploader("Upload Raw Department Excel/CSV", type=["xlsx", "csv"], key="bank_file_uploader")
+
+# Session State for File Data Management
+if "file_cleared" not in st.session_state:
+    st.session_state.file_cleared = False
+
+# Reset Session Button (Temporary Wipe)
+if uploaded_file is not None:
+    if st.sidebar.button("🗑️ Clear Uploaded File (Temporary Reset)"):
+        st.session_state.file_cleared = True
+        st.sidebar.success("Uploaded dataset cleared from session memory!")
+        st.rerun()
 
 bank_name = st.sidebar.text_input("Institution Name", value="Commercial Bank / Financial Institution")
 current_period = st.sidebar.selectbox("Current Reporting Period", ["Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
@@ -61,7 +73,7 @@ comparison_period = st.sidebar.selectbox("Comparison Base Period", ["Q3 2026 (Pr
 
 @st.cache_data
 def generate_master_bank_dataset():
-    """Generates standardized multi-period bank data including current and prior quarter balances."""
+    """Generates default standardized banking dataset."""
     districts = ["Addis North", "Addis South", "Hawassa", "Adama", "Bahir Dar", "Dire Dawa"]
     directorates = ["Retail Banking", "Corporate Banking", "Credit & Risk Management", "Digital Banking", "Treasury & Finance", "Operations"]
     saving_types = ["Demand Deposit", "Saving Account", "Fixed Time Deposit", "Special Interest Account"]
@@ -76,9 +88,7 @@ def generate_master_bank_dataset():
         seg = random.choice(segments)
         
         cur_bal = random.randint(12000000, 180000000)
-        # Prior period balance generated with slight variance (-15% to +20%)
         prior_bal = cur_bal * random.uniform(0.85, 1.15)
-        
         acc = random.randint(800, 25000)
         npl = random.randint(100000, 4500000)
         target = cur_bal * random.uniform(1.05, 1.30)
@@ -99,58 +109,108 @@ def generate_master_bank_dataset():
         })
     return pd.DataFrame(rows)
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
+# Dynamic Schema Resolver
+def normalize_and_adapt_schema(input_df):
+    """Auto-adapts uploaded spreadsheets with missing or alternative headers."""
+    col_mapping = {}
+    for col in input_df.columns:
+        c_lower = col.lower()
+        if "branch" in c_lower or "location" in c_lower:
+            col_mapping[col] = "Branch Location"
+        elif "district" in c_lower or "region" in c_lower:
+            col_mapping[col] = "District"
+        elif "directorate" in c_lower or "department" in c_lower:
+            col_mapping[col] = "Directorate"
+        elif "saving" in c_lower or "deposit type" in c_lower:
+            col_mapping[col] = "Saving Type"
+        elif "segment" in c_lower:
+            col_mapping[col] = "Customer Segment"
+        elif "current" in c_lower or "balance" in c_lower or "portfolio" in c_lower:
+            if "prior" not in c_lower and "target" not in c_lower:
+                col_mapping[col] = "Current Portfolio Balance (ETB)"
+        elif "prior" in c_lower or "previous" in c_lower:
+            col_mapping[col] = "Prior Portfolio Balance (ETB)"
+        elif "target" in c_lower or "budget" in c_lower:
+            col_mapping[col] = "Target Portfolio (ETB)"
+        elif "npl" in c_lower or "non-performing" in c_lower:
+            col_mapping[col] = "Non-Performing Loans (NPL ETB)"
+            
+    adapted_df = input_df.rename(columns=col_mapping)
+    
+    # Fill in missing required columns dynamically
+    if "Branch Location" not in adapted_df.columns:
+        adapted_df["Branch Location"] = [f"Branch_{i:02d}" for i in range(1, len(adapted_df)+1)]
+    if "District" not in adapted_df.columns:
+        adapted_df["District"] = "Central District"
+    if "Directorate" not in adapted_df.columns:
+        adapted_df["Directorate"] = "Retail Banking"
+    if "Current Portfolio Balance (ETB)" not in adapted_df.columns:
+        numeric_cols = adapted_df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            adapted_df["Current Portfolio Balance (ETB)"] = adapted_df[numeric_cols[0]]
         else:
-            df = pd.read_excel(uploaded_file)
-        st.sidebar.success("Multi-Department Raw Data Ingested!")
+            adapted_df["Current Portfolio Balance (ETB)"] = 50000000.0
+            
+    if "Prior Portfolio Balance (ETB)" not in adapted_df.columns:
+        adapted_df["Prior Portfolio Balance (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.92
+    if "Target Portfolio (ETB)" not in adapted_df.columns:
+        adapted_df["Target Portfolio (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 1.15
+    if "Non-Performing Loans (NPL ETB)" not in adapted_df.columns:
+        adapted_df["Non-Performing Loans (NPL ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.03
+    if "Active Accounts" not in adapted_df.columns:
+        adapted_df["Active Accounts"] = 5000
+    if "Operating Expense (ETB)" not in adapted_df.columns:
+        adapted_df["Operating Expense (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.02
+    if "Operating Income (ETB)" not in adapted_df.columns:
+        adapted_df["Operating Income (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.08
+        
+    return adapted_df
+
+# Load & Process Data
+if uploaded_file is not None and not st.session_state.file_cleared:
+    try:
+        raw_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+        df = normalize_and_adapt_schema(raw_df)
+        st.sidebar.success("✅ File Ingested & Schema Auto-Adapted!")
     except Exception as e:
         st.sidebar.error(f"Error loading file: {e}")
         df = generate_master_bank_dataset()
 else:
     df = generate_master_bank_dataset()
 
-# Ensure required columns exist
-if "Current Portfolio Balance (ETB)" not in df.columns and "Total Portfolio Balance (ETB)" in df.columns:
-    df["Current Portfolio Balance (ETB)"] = df["Total Portfolio Balance (ETB)"]
-if "Prior Portfolio Balance (ETB)" not in df.columns:
-    df["Prior Portfolio Balance (ETB)"] = df["Current Portfolio Balance (ETB)"] * 0.92
-
-# Calculate Growth Rate
+# Calculate Portfolio Growth
 df["Portfolio Growth (%)"] = ((df["Current Portfolio Balance (ETB)"] - df["Prior Portfolio Balance (ETB)"]) / df["Prior Portfolio Balance (ETB)"] * 100).round(2)
 
 # ==========================================
-# 3. BALANCE SHEET & REGULATORY PARAMETERS
+# 3. BALANCE SHEET & CAPITAL EVALUATION
 # ==========================================
-st.header("⚙️ 1. Corporate Balance Sheet & Regulatory Parameters")
+st.header("⚙️ 1. Complete Balance Sheet & Capital Evaluation Engine")
 
-c1, c2, c3, c4 = st.columns(4)
-with c1:
+b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+with b_col1:
     earning_assets = st.number_input("Total Earning Assets (ETB)", min_value=1.0, value=50000000000.0, step=1000000000.0)
-with c2:
-    tier1_capital = st.number_input("Tier 1 Capital (ETB)", min_value=1.0, value=6500000000.0, step=100000000.0)
-with c3:
-    tier2_capital = st.number_input("Tier 2 Capital (ETB)", min_value=0.0, value=1500000000.0, step=100000000.0)
-with c4:
+with b_col2:
+    tier1_capital = st.number_input("Tier 1 Core Capital (ETB)", min_value=1.0, value=6500000000.0, step=100000000.0)
+with b_col3:
+    tier2_capital = st.number_input("Tier 2 Supplementary Capital (ETB)", min_value=0.0, value=1500000000.0, step=100000000.0)
+with b_col4:
     rwa = st.number_input("Risk-Weighted Assets (RWA ETB)", min_value=1.0, value=38000000000.0, step=1000000000.0)
 
-# Expansion Slots
-st.subheader("➕ Dynamic Expansion Slots (Custom Shock Parameters)")
+# Dynamic Variable Injection
+st.subheader("➕ Dynamic Shock Variables & Variable Customization")
 e_col1, e_col2, e_col3 = st.columns(3)
 with e_col1:
     opex_shock = st.number_input("Unplanned OPEX Shock Buffer (ETB)", value=250000000.0, step=10000000.0)
 with e_col2:
     npl_provision_buffer = st.number_input("Additional NPL Provision Buffer (%)", value=1.5, step=0.1)
 with e_col3:
-    digital_adoption_rate = st.number_input("Digital Banking Adoption Rate (%)", value=68.4, step=0.5)
+    liquid_reserve_req = st.number_input("Regulatory Reserve Requirement (%)", value=15.0, step=0.5)
 
 # ==========================================
-# 4. DETERMINISTIC FINANCIAL KPIS & MULTI-PERIOD TRENDS
+# 4. DETERMINISTIC FINANCIAL KPIS & CAMELS
 # ==========================================
 st.markdown("---")
-st.header("📊 2. Corporate KPIs & Multi-Period Trend Analysis")
+st.header("📊 2. Corporate Performance & CAMELS Soundness Rating")
 
 car = ((tier1_capital + tier2_capital) / rwa) * 100.0
 total_cur_portfolio = df["Current Portfolio Balance (ETB)"].sum()
@@ -167,19 +227,19 @@ cir = (total_opex / total_opinc) * 100.0 if total_opinc > 0 else 0.0
 nim = ((total_opinc - total_opex) / earning_assets) * 100.0
 roe = ((total_opinc - total_opex) / (tier1_capital + tier2_capital)) * 100.0
 
-# CAMELS Score Calculation
+# CAMELS Score Logic
 if car >= 12.0 and overall_npl_ratio <= 5.0 and cir <= 50.0:
-    camels_grade = "1 - STRONG (Soundness Grade A)"
+    camels_grade = "1 - STRONG (Grade A Soundness)"
 elif car >= 10.0 and overall_npl_ratio <= 8.0:
-    camels_grade = "2 - SATISFACTORY (Soundness Grade B)"
+    camels_grade = "2 - SATISFACTORY (Grade B Soundness)"
 else:
-    camels_grade = "3 - WATCHLIST (Requires Supervisory Attention)"
+    camels_grade = "3 - WATCHLIST (Supervisory Action Required)"
 
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
-    st.metric("Current Portfolio Balance", f"{total_cur_portfolio:,.0f} ETB", delta=f"{portfolio_growth_yoy:+.2f}% vs {comparison_period}")
+    st.metric("Total Bank Portfolio", f"{total_cur_portfolio:,.0f} ETB", delta=f"{portfolio_growth_yoy:+.2f}% vs {comparison_period}")
 with k2:
-    st.metric("Capital Adequacy (CAR)", f"{car:.2f}%", delta="Target ≥ 12%")
+    st.metric("Capital Adequacy (CAR)", f"{car:.2f}%", delta="Regulatory Target ≥ 12%")
 with k3:
     st.metric("Cost-to-Income (CIR)", f"{cir:.2f}%", delta="Target ≤ 50%", delta_color="inverse")
 with k4:
@@ -188,7 +248,7 @@ with k5:
     st.metric("CAMELS Rating", camels_grade)
 
 # ==========================================
-# 5. BALANCED SCORECARD (BSC) EVALUATION
+# 5. BSC EVALUATION & DYNAMIC TABLE CONTROLS
 # ==========================================
 st.markdown("---")
 st.header("🎯 3. Directorate BSC Evaluation & Strategy Realization")
@@ -208,22 +268,28 @@ overall_mission_achievement = dir_summary["Target Achievement (%)"].mean()
 
 m_col1, m_col2 = st.columns([1, 2])
 with m_col1:
-    st.markdown("#### Corporate Mission Realization")
-    st.metric("Strategy Execution Score", f"{overall_mission_achievement:.2f}%")
+    st.markdown("#### Corporate Strategy Realization")
+    st.metric("Execution Achievement Score", f"{overall_mission_achievement:.2f}%")
     if overall_mission_achievement >= 95.0:
         st.success("🌟 **EXCELLENT:** Strategy execution aligned with long-term corporate vision.")
     else:
-        st.warning("⚠️ **GAP DETECTED:** Directorate performance requires strategic intervention.")
+        st.warning("⚠️ **STRATEGIC GAP:** Directorate performance requires intervention.")
 
 with m_col2:
-    st.markdown("#### Directorate BSC Performance Ranking")
-    st.dataframe(dir_summary[["BSC Rank", "Directorate", "Current Portfolio Balance (ETB)", "Target Portfolio (ETB)", "Target Achievement (%)"]], use_container_width=True)
+    st.markdown("#### Directorate BSC Performance Table")
+    # Dynamic Heading Selection Control
+    selected_cols = st.multiselect(
+        "Customize Table Headings (Add/Delete Columns from View):",
+        options=list(dir_summary.columns),
+        default=["BSC Rank", "Directorate", "Current Portfolio Balance (ETB)", "Target Portfolio (ETB)", "Target Achievement (%)"]
+    )
+    st.dataframe(dir_summary[selected_cols], use_container_width=True)
 
 # ==========================================
 # 6. BRANCH RANKINGS & AUTOMATED ACTION PLANS
 # ==========================================
 st.markdown("---")
-st.header("🏆 4. Branch Network Rankings & Automated Intervention Plans")
+st.header("🏆 4. Branch Network Analytics & Intervention Action Plans")
 
 branch_agg = df.groupby(["Branch Location", "District"]).agg({
     "Current Portfolio Balance (ETB)": "sum",
@@ -239,7 +305,7 @@ sorted_branches = branch_agg.sort_values(by="Current Portfolio Balance (ETB)", a
 top_10 = sorted_branches.head(10)
 least_10 = sorted_branches.tail(10).sort_values(by="Current Portfolio Balance (ETB)", ascending=True)
 
-r_tab1, r_tab2, r_tab3 = st.tabs(["Top 10 Performing Branches", "Least 10 Performing Branches (Watchlist)", "Automated Intervention Action Plans"])
+r_tab1, r_tab2, r_tab3 = st.tabs(["Top 10 Best-Performing Branches", "Least 10 Performing Branches (Watchlist)", "Automated Intervention Action Plans"])
 
 with r_tab1:
     st.subheader("🌟 Top 10 Best-Performing Branches")
@@ -250,9 +316,7 @@ with r_tab2:
     st.dataframe(least_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]], use_container_width=True)
 
 with r_tab3:
-    st.subheader("🛠️ Automated Action Plans for Watchlist Branches")
-    st.write("Targeted intervention protocols generated deterministically for low-volume and high-NPL locations:")
-    
+    st.subheader("🛠️ Automated Action Plans for Watchlist Locations")
     for idx, row in least_10.iterrows():
         b_name = row["Branch Location"]
         b_dist = row["District"]
@@ -262,96 +326,87 @@ with r_tab3:
         st.markdown(f"""
         <div class="action-card">
             <strong>📍 {b_name} ({b_dist} District)</strong> | Portfolio: {row['Current Portfolio Balance (ETB)']:,.0f} ETB | Growth: {b_growth:+.2f}% | NPL Ratio: {b_npl:.2f}%<br>
-            <em>Recommended Executive Action:</em>
+            <em>Executive Action Required:</em>
             <ul>
-                {"<li><strong>NPL Recovery Taskforce:</strong> Immediate audit and collection strategy required due to elevated credit risk (>5%).</li>" if b_npl > 5.0 else "<li><strong>Deposit Mobilization Drive:</strong> Launch targeted SME and commercial retail campaigns to increase core deposits.</li>"}
-                {"<li><strong>Liquidity Injection & Product Restructuring:</strong> Re-align local interest offerings to reverse negative deposit growth.</li>" if b_growth < 0 else "<li><strong>Digital Onboarding Push:</strong> Expand mobile and digital banking enrollment to lower branch operating overhead.</li>"}
+                {"<li><strong>Credit Audit Taskforce:</strong> Immediate NPL collection protocol required due to credit risk > 5%.</li>" if b_npl > 5.0 else "<li><strong>Deposit Mobilization Campaign:</strong> Target local SMEs and retail accounts to expand deposit portfolio.</li>"}
+                {"<li><strong>Liquidity Restructuring:</strong> Review local interest rate offerings to halt balance decline.</li>" if b_growth < 0 else "<li><strong>Digital Adoption Push:</strong> Enroll customers into mobile/internet banking to reduce overhead costs.</li>"}
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
 # ==========================================
-# 7. FORMAL BOARDROOM REPORT, PPT & EXCEL EXPORTS
+# 7. EXECUTIVE BOARDROOM REPORTS & EXPORTS
 # ==========================================
 st.markdown("---")
-st.header("📄 5. Formal Executive Report, Boardroom PPT & Excel Exports")
+st.header("📄 5. Formal Executive Report & Multi-Sheet Excel Exports")
 
-ex_tab1, ex_tab2, ex_tab3 = st.tabs(["Printable Boardroom PDF Report", "PowerPoint Slide Deck Outline", "Multi-Sheet Excel Download"])
+ex_tab1, ex_tab2, ex_tab3 = st.tabs(["Printable Executive Summary Report", "Boardroom PPT Outline", "Multi-Sheet Excel Export"])
 
 with ex_tab1:
-    st.subheader("📄 Official Executive Summary Report")
-    st.caption("Copy or print this structured formal report directly for executive committee meetings and regulatory submissions.")
-    
+    st.subheader("📄 Boardroom Performance Report")
     formal_report = f"""
     ====================================================================================
     INSTITUTION: {bank_name.upper()}
-    OFFICIAL BOARDROOM EXECUTIVE PERFORMANCE REPORT | PERIOD: {current_period}
+    OFFICIAL EXECUTIVE PERFORMANCE & BALANCE SHEET REPORT | PERIOD: {current_period}
     BASELINE COMPARISON: {comparison_period}
     ====================================================================================
     
-    1. EXECUTIVE SUMMARY & CAPITAL COMPLIANCE
+    1. BALANCE SHEET HEALTH & REGULATORY CAPITAL
        ---------------------------------------------------------------------------------
-       • Total Managed Earning Portfolio: {total_cur_portfolio:,.2f} ETB (YoY Growth: {portfolio_growth_yoy:+.2f}%).
-       • Capital Adequacy Ratio (CAR): {car:.2f}% (Regulatory Minimum: 12.00%).
+       • Total Portfolio Balance: {total_cur_portfolio:,.2f} ETB ({portfolio_growth_yoy:+.2f}% YoY Growth).
+       • Capital Adequacy Ratio (CAR): {car:.2f}% (Regulatory Requirement: 12.00%).
        • Net Interest Margin (NIM): {nim:.2f}% | Return on Equity (ROE): {roe:.2f}%.
-       • Cost-to-Income Ratio (CIR): {cir:.2f}% | Overall NPL Exposure Ratio: {overall_npl_ratio:.2f}%.
-       • Institution CAMELS Composite Soundness Rating: {camels_grade}.
+       • Cost-to-Income Ratio (CIR): {cir:.2f}% | NPL Exposure Ratio: {overall_npl_ratio:.2f}%.
+       • CAMELS Composite Rating: {camels_grade}.
     
-    2. BALANCED SCORECARD (BSC) & STRATEGIC MISSION REALIZATION
+    2. BALANCED SCORECARD (BSC) STRATEGY REALIZATION
        ---------------------------------------------------------------------------------
-       • Overall Corporate Strategy Execution Score: {overall_mission_achievement:.2f}%.
-       • Highest Performing Directorate: {dir_summary.iloc[0]['Directorate']} (Rank #1 - Target Achievement: {dir_summary.iloc[0]['Target Achievement (%)']:.2f}%).
-       • Priority Strategic Directorate Focus: {dir_summary.iloc[-1]['Directorate']} (Rank #{len(dir_summary)} - Target Achievement: {dir_summary.iloc[-1]['Target Achievement (%)']:.2f}%).
+       • Corporate Execution Score: {overall_mission_achievement:.2f}%.
+       • Top Performing Directorate: {dir_summary.iloc[0]['Directorate']} ({dir_summary.iloc[0]['Target Achievement (%)']:.2f}% Achievement).
+       • Strategic Focus Directorate: {dir_summary.iloc[-1]['Directorate']} ({dir_summary.iloc[-1]['Target Achievement (%)']:.2f}% Achievement).
     
-    3. BRANCH NETWORK PERFORMANCE & WATCHLIST SUMMARY
+    3. NETWORK WATCHLIST & BRANCH INTERVENTIONS
        ---------------------------------------------------------------------------------
-       • Leading Branch by Volume: {top_10.iloc[0]['Branch Location']} ({top_10.iloc[0]['District']} District) | Portfolio: {top_10.iloc[0]['Current Portfolio Balance (ETB)']:,.2f} ETB.
-       • Lowest Volume Watchlist Branch: {least_10.iloc[0]['Branch Location']} ({least_10.iloc[0]['District']} District) | Portfolio: {least_10.iloc[0]['Current Portfolio Balance (ETB)']:,.2f} ETB.
-       • Primary Action Required: Deployment of recovery taskforce and targeted deposit drives across Watchlist locations.
+       • Top Performing Branch: {top_10.iloc[0]['Branch Location']} ({top_10.iloc[0]['District']} District).
+       • Primary Watchlist Priority: {least_10.iloc[0]['Branch Location']} ({least_10.iloc[0]['District']} District).
     
     ====================================================================================
-    REPORT CERTIFIED BY EXECUTIVE PULSE AI | AIR-GAPPED ENTERPRISE ENGINE
+    CERTIFIED BY EXECUTIVE PULSE AI | AIR-GAPPED ENTERPRISE ENGINE
     ====================================================================================
     """
-    
     st.markdown(f'<div class="report-box"><pre>{formal_report}</pre></div>', unsafe_allow_html=True)
 
 with ex_tab2:
-    st.subheader("📊 PowerPoint Slide Deck Outline")
+    st.subheader("📊 PPT Boardroom Slide Outline")
     ppt_text = f"""
-    SLIDE 1: FINANCIAL HIGHLIGHTS & CAPITAL ADEQUACY
-    - Portfolio Total: {total_cur_portfolio:,.0f} ETB ({portfolio_growth_yoy:+.2f}% growth vs {comparison_period}).
-    - Capital Adequacy Ratio: {car:.2f}% | Soundness Rating: {camels_grade}.
-    - Cost Efficiency: Cost-to-Income Ratio stands at {cir:.2f}%.
+    SLIDE 1: BALANCE SHEET & FINANCIAL SOUNDNESS
+    - Total Earning Assets: {earning_assets:,.0f} ETB | CAR: {car:.2f}%.
+    - Overall Bank Portfolio Growth: {portfolio_growth_yoy:+.2f}%.
+    - CAMELS Rating: {camels_grade}.
 
-    SLIDE 2: BSC DIRECTORATE RANKINGS & MISSION REALIZATION
-    - Strategy Execution Rating: {overall_mission_achievement:.2f}% towards Strategic Plan.
-    - Rank 1 Directorate: {dir_summary.iloc[0]['Directorate']} ({dir_summary.iloc[0]['Target Achievement (%)']:.1f}% Target Achieved).
+    SLIDE 2: BSC STRATEGY EXECUTION
+    - Overall Strategy Score: {overall_mission_achievement:.2f}%.
+    - Top Directorate: {dir_summary.iloc[0]['Directorate']}.
 
-    SLIDE 3: BRANCH RANKINGS & WATCHLIST INTERVENTIONS
-    - Top Performing Branch: {top_10.iloc[0]['Branch Location']}.
-    - Watchlist Priority Branch: {least_10.iloc[0]['Branch Location']}.
-    - Action Plan: Deploy deposit mobilization drives and credit recovery teams.
+    SLIDE 3: BRANCH INTERVENTIONS
+    - Watchlist Priority Location: {least_10.iloc[0]['Branch Location']}.
+    - Action Required: Deploy recovery taskforce and targeted SME deposit drives.
     """
-    st.text_area("PPT Outline Text", value=ppt_text, height=250)
+    st.text_area("Copy PPT Outline", value=ppt_text, height=220)
 
 with ex_tab3:
-    st.subheader("📥 Master Multi-Sheet Excel Export")
-    st.write("Export all raw data, period comparisons, directorate BSC rankings, and branch action plans into a single structured workbook.")
-    
+    st.subheader("📥 Export Master Excel Workbook")
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='MultiPeriod_Raw_Data', index=False)
-        dir_summary.to_excel(writer, sheet_name='Directorate_BSC_Rankings', index=False)
+        df.to_excel(writer, sheet_name='Raw_Bank_Data', index=False)
+        dir_summary.to_excel(writer, sheet_name='Directorate_BSC', index=False)
         top_10.to_excel(writer, sheet_name='Top_10_Branches', index=False)
-        least_10.to_excel(writer, sheet_name='Least_10_Watchlist', index=False)
+        least_10.to_excel(writer, sheet_name='Watchlist_Branches', index=False)
         branch_agg.to_excel(writer, sheet_name='All_Branch_Analytics', index=False)
     
-    processed_excel = excel_buffer.getvalue()
-
     st.download_button(
-        label="📥 Download Master Banking Excel Workbook (.xlsx)",
-        data=processed_excel,
-        file_name=f"Master_Executive_Bank_Report_{current_period}.xlsx",
+        label="📥 Download Master Excel Report (.xlsx)",
+        data=excel_buffer.getvalue(),
+        file_name=f"Executive_Bank_Report_{current_period}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
