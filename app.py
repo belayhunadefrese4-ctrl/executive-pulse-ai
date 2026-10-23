@@ -41,7 +41,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Strict Schema Ingestion, Zero-Fabrication Enforcement, Linked Summaries & Reports</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Full-Row Ingestion, Dynamic Channel Aggregation, Linked Summaries & Reports</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -75,11 +75,11 @@ else:
     raw_df = None
 
 if raw_df is None or raw_df.empty:
-    st.info("👆 Upload your master branch files using the sidebar to generate verified summaries.")
+    st.info("👆 Upload your master branch files using the sidebar to generate fully linked summaries.")
     st.stop()
 
 # ==========================================
-# 2. STRICT MAPPING (NO FABRICATED NUMBERS)
+# 2. ROBUST MAPPING & CHANNEL AGGREGATION
 # ==========================================
 cols = raw_df.columns.tolist()
 
@@ -100,7 +100,9 @@ c_q_actual = find_header(["q1 actual", "quarterly actual"])
 c_pos_start = find_header(["30 jun", "jun 2026", "prior position"])
 c_pos_end = find_header(["30 sep", "sep 2026", "current position", "position as of"])
 c_saving = find_header(["saving", "demand", "fixed", "deposit type", "product"])
-c_mob = find_header(["mobile", "mbank", "mobil"])
+
+# 디지털 및 부가 채널 헤더 자동 감지 (유연한 키워드 매칭)
+c_mob = find_header(["mobile", "mbank", "mobil", "smartphone"])
 c_atm = find_header(["atm"])
 c_pos_m = find_header(["pos merchant", "merchant"])
 c_pos_d = find_header(["pos deployed", "pos dep"])
@@ -115,16 +117,16 @@ df["__BranchName"] = raw_df[c_name].astype(str) if c_name else "N/A"
 df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "Unspecified"
 df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Unspecified"
 
-# 숫자 데이터는 엑셀에 값이 없으면 0으로 처리 (허위 임의값 주입 원천 차단)
+# 수치 데이터 매핑 (없거나 비어있으면 0으로 초기화하여 연산 오류 방지)
 df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(0) if c_m_plan else 0.0
 df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(0) if c_m_actual else 0.0
 df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(0) if c_q_plan else 0.0
 df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(0) if c_q_actual else 0.0
 df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(0) if c_pos_start else 0.0
 df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(0) if c_pos_end else 0.0
-df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General"
+df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General Deposit"
 
-# 디지털 및 부가 채널 지표 (파일에 열이 없거나 비어 있으면 정확히 0으로 반영)
+# 디지털 채널 데이터 매핑 (마스터 데이터의 열 값을 정확히 읽고 없으면 0)
 df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(0) if c_mob else 0
 df["__ATMUsers"] = pd.to_numeric(raw_df[c_atm], errors="coerce").fillna(0) if c_atm else 0
 df["__POSMerchant"] = pd.to_numeric(raw_df[c_pos_m], errors="coerce").fillna(0) if c_pos_m else 0
@@ -144,7 +146,7 @@ total_prior = df["__PosStart"].sum()
 overall_growth = ((total_portfolio - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
 
 # ==========================================
-# 3. EXECUTIVE TABS & SUMMARIES
+# 3. EXECUTIVE TABS & FULLY LINKED SUMMARIES
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏛️ District & Location Summary", 
@@ -181,14 +183,15 @@ with tab2:
         Position_Prior=("__PosStart", "sum"),
         Monthly_Actual=("__MonthlyActual", "sum"),
         YTD_Actual=("__Q1Actual", "sum"),
-        Position_Current=("__PosEnd", "sum")
+        Position_Current=("__PosEnd", "sum"),
+        Mobile_Users=("__MobileUsers", "sum")
     ).reset_index().rename(columns={"__DepositType": "Deposit Product Type"})
     
     product_summary["Portfolio Share (%)"] = (product_summary["Position_Current"] / (total_portfolio if total_portfolio != 0 else np.nan) * 100).fillna(0).round(1)
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
 with tab3:
-    st.subheader("3. Customer Base & Digital Channels Summary")
+    st.subheader("3. Customer Base & Digital Channels Summary (Linked to Master Data)")
     digital_chan_sum = df.groupby(["__District", "__Location"]).agg(
         Active_Branches=("__BranchName", "count"),
         Mobile_Banking_Users=("__MobileUsers", "sum"),
@@ -218,6 +221,7 @@ with tab5:
     total_pos = df["__POSDeployed"].sum()
     total_qr = df["__QRDeployed"].sum()
     total_agents = df["__AgentBanking"].sum()
+    total_school = df["__SchoolSys"].sum()
 
     narrative_text = f"""
 ====================================================================================
@@ -233,10 +237,9 @@ EXECUTIVE DEPOSIT PERFORMANCE & DIGITAL ADOPTION REPORT | PERIOD: {reporting_per
 
 2. DIGITAL CHANNEL ADOPTION & INFRASTRUCTURE EXPANSION
    ---------------------------------------------------------------------------------
-   • Mobile Banking Ecosystem: Scaled to {total_mobile:,.0f} active users.
-   • POS Merchant Network: {total_pos:,.0f} active POS units deployed across regional networks.
-   • QR Merchant Network: {total_qr:,.0f} QR merchant points actively deployed.
-   • Agent Banking & Inclusion: {total_agents:,.0f} digital agent outlets driving rural onboarding.
+   • Mobile Banking Ecosystem: Scaled to {total_mobile:,.0f} active users from master records.
+   • POS & QR Network: {total_pos:,.0f} POS units and {total_qr:,.0f} QR merchant points deployed.
+   • Specialized Services: {total_school:,.0f} school system accounts and {total_agents:,.0f} digital agent outlets active.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE FINANCIAL ENGINE
@@ -250,13 +253,13 @@ SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
 - Active Reporting Branch Network: {len(df)} Branches
 
 SLIDE 2: DEPOSIT BREAKDOWN BY PRODUCT TYPE
-- Product Portfolio Mix: Saving Accounts, Demand Deposits, and Fixed Time Deposits.
+- Product Portfolio Mix: Saving, Demand, and Fixed Time Deposits.
 - Leading Performance District: {top_district}.
 
 SLIDE 3: DIGITAL CHANNEL & MERCHANT ECOSYSTEM
-- Mobile Banking Active Users: {total_mobile:,.0f}
-- POS Deployed: {total_pos:,.0f} Units | QR Merchant Points: {total_qr:,.0f} Deployed
-- Agent Banking Network: {total_agents:,.0f} Active Outlets
+- Mobile Banking Users: {total_mobile:,.0f}
+- POS Deployed: {total_pos:,.0f} Units | QR Deployed: {total_qr:,.0f} Points
+- Agent Banking Outlets: {total_agents:,.0f} | School Systems: {total_school:,.0f}
 """
 
     col_r1, col_r2 = st.columns(2)
