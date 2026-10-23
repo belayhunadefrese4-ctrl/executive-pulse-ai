@@ -14,12 +14,10 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .main-header { font-size: 2.2rem; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
-    .sub-header { font-size: 1.05rem; color: #475569; margin-bottom: 20px; }
-    .security-badge { background-color: #065F46; color: white; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
-    .template-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-    .action-card { background-color: #FEF2F2; border-left: 4px solid #EF4444; padding: 14px; margin-bottom: 12px; border-radius: 6px; }
-    .report-box { background-color: #FFFFFF; border: 1px solid #CBD5E1; padding: 25px; border-radius: 8px; font-family: 'Times New Roman', Times, serif; }
+    .main-header { font-size: 2.1rem; font-weight: 800; color: #0F172A; }
+    .sub-header { font-size: 1.0rem; color: #475569; }
+    .security-badge { background-color: #065F46; color: white; padding: 6px 12px; border-radius: 6px; font-weight: bold; }
+    .action-card { background-color: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px; margin-bottom: 10px; border-radius: 4px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -33,245 +31,183 @@ user_key = st.sidebar.text_input("Enter Master Executive Key", type="password")
 
 if user_key != MASTER_SECURITY_KEY:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Commercial Banking Engine</p>', unsafe_allow_html=True)
-    st.warning("🔒 Access Restricted: Please enter the valid Master Executive Key in the sidebar to unlock enterprise data processing.")
-    st.info("System Status: Air-Gapped Secure | Tier-1 Enterprise Encryption Active")
+    st.warning("🔒 Access Restricted: Please enter the valid Master Executive Key in the sidebar.")
     st.stop()
 
 # ==========================================
-# APP HEADER
+# APP HEADER & INGESTION
 # ==========================================
-col_title, col_sec = st.columns([3, 1])
-with col_title:
-    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Commercial Banking Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Multi-Template Institutional Intelligence & Dynamic Data Governance Platform</p>', unsafe_allow_html=True)
-with col_sec:
-    st.markdown("<br><span class='security-badge'>🛡️ AIR-GAPPED SECURE</span>", unsafe_allow_html=True)
-
+st.markdown('<p class="main-header">🏦 Executive Pulse AI: Commercial Banking Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Comprehensive Branch Network, Deposit Product Breakdown, & Digital Customer Summaries</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ==========================================
-# 2. FILE UPLOAD & INGESTION
-# ==========================================
-st.sidebar.header("📥 Data Ingestion & Settings")
-uploaded_file = st.sidebar.file_uploader("Upload Master Bank Excel/CSV", type=["xlsx", "csv"], key="master_file_uploader")
-
-if "file_cleared" not in st.session_state:
-    st.session_state.file_cleared = False
-
-if uploaded_file is not None:
-    if st.sidebar.button("🗑️ Clear Uploaded File (Reset)"):
-        st.session_state.file_cleared = True
-        st.sidebar.success("Dataset cleared!")
-        st.rerun()
+st.sidebar.header("📥 Ingestion & Controls")
+uploaded_file = st.sidebar.file_uploader("Upload Master Bank Excel/CSV", type=["xlsx", "csv"])
 
 bank_name = st.sidebar.text_input("Institution Name", value="Commercial Bank / Financial Institution")
 current_period = st.sidebar.selectbox("Reporting Period", ["Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-def load_master_data(file):
-    df = pd.read_csv(file) if file.name.endswith('.csv') else pd.read_excel(file)
-    df = df.dropna(how='all').dropna(axis=1, how='all')
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
-
-if uploaded_file is not None and not st.session_state.file_cleared:
+if uploaded_file is not None:
     try:
-        user_df = load_master_data(uploaded_file)
-        st.sidebar.success(f"✅ Loaded {len(user_df)} Rows Successfully!")
+        raw_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+        raw_df = raw_df.dropna(how='all').dropna(axis=1, how='all')
+        raw_df.columns = [str(c).strip() for c in raw_df.columns]
+        st.sidebar.success(f"✅ Successfully Loaded All {len(raw_df)} Rows from Master File!")
     except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-        user_df = None
+        st.sidebar.error(f"Error loading file: {e}")
+        raw_df = None
 else:
-    user_df = None
+    raw_df = None
 
-if user_df is None:
-    st.info("👆 Please upload your master bank Excel/CSV file using the sidebar uploader to activate the templates.")
+if raw_df is None:
+    st.info("👆 Please upload your master deposit & branch Excel spreadsheet using the sidebar uploader.")
     st.stop()
 
 # ==========================================
-# 3. SEMANTIC COLUMN MAPPING
+# 2. INTELLIGENT COLUMN MAPPING & DATA PREP
 # ==========================================
-cols = user_df.columns.tolist()
+cols = raw_df.columns.tolist()
 
-def get_col(keywords):
+def find_header(keywords):
     for c in cols:
         if any(k in c.lower() for k in keywords):
             return c
     return None
 
-c_branch = get_col(["branch name", "branch location", "branch code", "branch"])
-c_district = get_col(["district", "region", "area", "location"])
-c_balance = get_col(["position as of", "current", "balance", "actual", "quarterly"])
-c_prior = get_col(["prior", "previous", "monthly actual", "last"])
-c_target = get_col(["plan", "target", "budget", "q1 plan"])
-c_deposit = get_col(["saving", "deposit", "account type", "category"])
-c_segment = get_col(["segment", "group", "customer", "sector"])
-c_npl = get_col(["npl", "non-performing", "default"])
+c_code = find_header(["branch code", "code"])
+c_name = find_header(["branch name", "branch", "name"])
+c_loc = find_header(["location", "category", "city", "outlying"])
+c_dist = find_header(["district", "region", "area"])
+c_m_plan = find_header(["monthly plan", "m_plan"])
+c_m_actual = find_header(["monthly actual", "m_actual"])
+c_q_plan = find_header(["q1 plan", "quarterly plan"])
+c_q_actual = find_header(["q1 actual", "quarterly actual"])
+c_pos_start = find_header(["30 jun", "jun 2026", "prior position"])
+c_pos_end = find_header(["30 sep", "sep 2026", "current position", "position as of"])
+c_saving = find_header(["saving", "demand", "fixed", "deposit type", "product"])
+c_digital = find_header(["digital", "mobile", "internet", "e-banking"])
+c_segment = find_header(["segment", "group", "customer", "crm", "irm", "msme"])
 
-calc_df = user_df.copy()
-calc_df["__Branch"] = user_df[c_branch].astype(str) if c_branch else [f"Branch_{i}" for i in range(len(user_df))]
-calc_df["__District"] = user_df[c_district].astype(str) if c_district else "Central District"
-calc_df["__Cur_Balance"] = pd.to_numeric(user_df[c_balance], errors="coerce").fillna(0) if c_balance else 50000000.0
-calc_df["__Prior_Balance"] = pd.to_numeric(user_df[c_prior], errors="coerce").fillna(calc_df["__Cur_Balance"] * 0.92) if c_prior else calc_df["__Cur_Balance"] * 0.92
-calc_df["__Target_Balance"] = pd.to_numeric(user_df[c_target], errors="coerce").fillna(calc_df["__Cur_Balance"] * 1.15) if c_target else calc_df["__Cur_Balance"] * 1.15
-calc_df["__Deposit_Cat"] = user_df[c_deposit].astype(str) if c_deposit else "General Deposit"
-calc_df["__Cust_Group"] = user_df[c_segment].astype(str) if c_segment else "Retail Customers"
-calc_df["__NPL"] = pd.to_numeric(user_df[c_npl], errors="coerce").fillna(calc_df["__Cur_Balance"] * 0.02) if c_npl else calc_df["__Cur_Balance"] * 0.02
+df = raw_df.copy()
+df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else [f"BR-{i:03d}" for i in range(len(raw_df))]
+df["__BranchName"] = raw_df[c_name].astype(str) if c_name else [f"Branch_{i}" for i in range(len(raw_df))]
+df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "City"
+df["__District"] = raw_df[c_dist].astype(str) if c_dist else "North"
+df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(10.0) if c_m_plan else 10.0
+df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(5.0) if c_m_actual else 5.0
+df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(30.0) if c_q_plan else 30.0
+df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(25.0) if c_q_actual else 25.0
+df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(100.0) if c_pos_start else 100.0
+df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(120.0) if c_pos_end else 120.0
+df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "Saving Account"
+df["__DigitalCust"] = pd.to_numeric(raw_df[c_digital], errors="coerce").fillna(1500) if c_digital else 1500
+df["__Segment"] = raw_df[c_segment].astype(str) if c_segment else "Retail"
 
-# ==========================================
-# 4. MULTI-TEMPLATE NAVIGATION ARCHITECTURE
-# ==========================================
-st.markdown("### 🗂️ Select Executive Analysis Template")
-template_choice = st.radio(
-    "Choose Template View:",
-    [
-        "🏛️ Template 1: Boardroom Capital & Soundness (KPIs & CAMELS)",
-        "🏆 Template 2: Branch Network Performance & Watchlist",
-        "💰 Template 3: Deposit Portfolio & Category Analytics",
-        "👥 Template 4: Customer Segmentation & Group Strategy",
-        "📂 Template 5: Master Data Inspector & Export Hub"
-    ],
-    horizontal=True
-)
-
-st.markdown("---")
+# Performance calculations
+df["Monthly Ach (%)"] = ((df["__MonthlyActual"] / df["__MonthlyPlan"].replace(0, np.nan)) * 100).fillna(0).round(1)
+df["Q1 Ach (%)"] = ((df["__Q1Actual"] / df["__Q1Plan"].replace(0, np.nan)) * 100).fillna(0).round(1)
+df["Growth From Jun (%)"] = (((df["__PosEnd"] - df["__PosStart"]) / df["__PosStart"].replace(0, np.nan)) * 100).fillna(0).round(1)
 
 # ==========================================
-# TEMPLATE 1: BOARDROOM CAPITAL & SOUNDNESS
+# 3. EXECUTIVE TABS & STRUCTURED SUMMARIES
 # ==========================================
-if "Template 1" in template_choice:
-    st.markdown("## 🏛️ Template 1: Boardroom Capital & Soundness Engine")
-    st.markdown("Evaluates institutional balance sheet health, regulatory capital adequacy, and CAMELS ratings.")
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "🏛️ District & Location Summary", 
+    "💰 Deposit by Product Type", 
+    "📱 Digital Customer Summary", 
+    "👥 Business Segment Summary", 
+    "🏆 Top & Watchlist Branches", 
+    "📂 Full Master Data View"
+])
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        earning_assets = st.number_input("Total Earning Assets (ETB)", min_value=1.0, value=50000000000.0, step=1000000000.0)
-    with c2:
-        tier1_capital = st.number_input("Tier 1 Core Capital (ETB)", min_value=1.0, value=6500000000.0, step=100000000.0)
-    with c3:
-        tier2_capital = st.number_input("Tier 2 Supplementary Capital (ETB)", min_value=0.0, value=1500000000.0, step=100000000.0)
-    with c4:
-        rwa = st.number_input("Risk-Weighted Assets (RWA ETB)", min_value=1.0, value=38000000000.0, step=1000000000.0)
+with tab1:
+    st.subheader("1. Deposit Performance by District & Location Category (City vs Outlying)")
+    district_summary = df.groupby(["__District", "__Location"]).agg(
+        Total_Branches=("__BranchName", "count"),
+        Position_Jun=("__PosStart", "sum"),
+        Monthly_Plan=("__MonthlyPlan", "sum"),
+        Monthly_Actual=("__MonthlyActual", "sum"),
+        Q1_Plan=("__Q1Plan", "sum"),
+        Q1_Actual=("__Q1Actual", "sum"),
+        Position_Sep=("__PosEnd", "sum"),
+        Digital_Customers=("__DigitalCust", "sum")
+    ).reset_index()
 
-    car = ((tier1_capital + tier2_capital) / rwa) * 100.0
-    total_cur = calc_df["__Cur_Balance"].sum()
-    total_prior = calc_df["__Prior_Balance"].sum()
-    growth_yoy = ((total_cur - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
-    npl_ratio = (calc_df["__NPL"].sum() / total_cur * 100) if total_cur > 0 else 0.0
+    district_summary["Monthly %"] = (district_summary["Monthly_Actual"] / district_summary["Monthly_Plan"].replace(0, np.nan) * 100).round(1)
+    district_summary["Q1 %"] = (district_summary["Q1_Actual"] / district_summary["Q1_Plan"].replace(0, np.nan) * 100).round(1)
+    district_summary["Growth (%)"] = ((district_summary["Position_Sep"] - district_summary["Position_Jun"]) / district_summary["Position_Jun"].replace(0, np.nan) * 100).round(1)
+
+    st.data_editor(district_summary, num_rows="dynamic", use_container_width=True, key="dist_summary_t")
+
+with tab2:
+    st.subheader("2. Deposit Breakdown by Product Type (Saving, Demand, Fixed Time)")
+    product_summary = df.groupby("__DepositType").agg(
+        Branch_Count=("__BranchName", "count"),
+        Position_Jun=("__PosStart", "sum"),
+        Monthly_Actual=("__MonthlyActual", "sum"),
+        YTD_Actual=("__Q1Actual", "sum"),
+        Position_Sep=("__PosEnd", "sum")
+    ).reset_index().rename(columns={"__DepositType": "Deposit Product Type"})
     
-    op_inc = total_cur * 0.085
-    op_exp = total_cur * 0.025
-    cir = (op_exp / op_inc) * 100.0
-    nim = ((op_inc - op_exp) / earning_assets) * 100.0
-    roe = ((op_inc - op_exp) / (tier1_capital + tier2_capital)) * 100.0
-
-    if car >= 12.0 and npl_ratio <= 5.0 and cir <= 50.0:
-        camels = "1 - STRONG (Grade A)"
-    elif car >= 10.0 and npl_ratio <= 8.0:
-        camels = "2 - SATISFACTORY (Grade B)"
-    else:
-        camels = "3 - WATCHLIST (Action Required)"
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    m1, m2, m3, m4, m5 = st.columns(5)
-    with m1:
-        st.metric("Total Portfolio", f"{total_cur:,.0f} ETB", delta=f"{growth_yoy:+.2f}%")
-    with m2:
-        st.metric("Capital Adequacy (CAR)", f"{car:.2f}%", delta="Target ≥ 12%")
-    with m3:
-        st.metric("Cost-to-Income (CIR)", f"{cir:.2f}%", delta="Target ≤ 50%", delta_color="inverse")
-    with m4:
-        st.metric("Overall NPL Ratio", f"{npl_ratio:.2f}%", delta="Target ≤ 5%", delta_color="inverse")
-    with m5:
-        st.metric("CAMELS Rating", camels)
-
-# ==========================================
-# TEMPLATE 2: BRANCH NETWORK PERFORMANCE
-# ==========================================
-elif "Template 2" in template_choice:
-    st.markdown("## 🏆 Template 2: Branch Network Performance & Watchlist")
-    st.markdown("Inspects regional branch performance, growth trends, and automated intervention action cards.")
-
-    branch_view = calc_df.copy()
-    branch_view["Growth (%)"] = (((branch_view["__Cur_Balance"] - branch_view["__Prior_Balance"]) / branch_view["__Prior_Balance"].replace(0, np.nan)) * 100).fillna(0).round(2)
-    branch_view["NPL Ratio (%)"] = ((branch_view["__NPL"] / branch_view["__Cur_Balance"].replace(0, np.nan)) * 100).fillna(0).round(2)
-
-    sorted_b = branch_view.sort_values(by="__Cur_Balance", ascending=False)
-    top_branches = sorted_b.head(10)
-    watchlist_branches = sorted_b.tail(10).sort_values(by="__Cur_Balance", ascending=True)
-
-    tab_t2_1, tab_t2_2, tab_t2_3 = st.tabs(["Top Performing Branches", "Watchlist Locations", "Automated Action Plans"])
-    with tab_t2_1:
-        st.subheader("🌟 Top 10 Branches")
-        st.data_editor(top_branches[user_df.columns], num_rows="dynamic", use_container_width=True, key="top_b_editor")
-    with tab_t2_2:
-        st.subheader("⚠️ Watchlist Locations")
-        st.data_editor(watchlist_branches[user_df.columns], num_rows="dynamic", use_container_width=True, key="watch_b_editor")
-    with tab_t2_3:
-        st.subheader("🛠️ Executive Intervention Protocols")
-        for idx, row in watchlist_branches.iterrows():
-            st.markdown(f"""
-            <div class="action-card">
-                <strong>📍 {row['__Branch']} ({row['__District']} District)</strong> | Balance: {row['__Cur_Balance']:,.0f} ETB | Growth: {row['Growth (%)']:+.2f}% | NPL: {row['NPL Ratio (%)']:.2f}%<br>
-                <em>Required Action:</em> Deploy credit recovery taskforce and execute aggressive deposit mobilization.
-            </div>
-            """, unsafe_allow_html=True)
-
-# ==========================================
-# TEMPLATE 3: DEPOSIT PORTFOLIO & CATEGORY
-# ==========================================
-elif "Template 3" in template_choice:
-    st.markdown("## 💰 Template 3: Deposit Portfolio & Category Analytics")
-    st.markdown("Analyzes deposit structures, saving account distributions, and category share percentages.")
-
-    dep_summary = calc_df.groupby("__Deposit_Cat").agg(
-        Total_Balance=("__Cur_Balance", "sum"),
-        Target_Balance=("__Target_Balance", "sum"),
-        NPL_Exposure=("__NPL", "sum")
-    ).reset_index().rename(columns={"__Deposit_Cat": "Deposit Category / Type"})
+    total_dep = product_summary["Position_Sep"].sum()
+    product_summary["Share (%)"] = (product_summary["Position_Sep"] / total_dep.replace(0, np.nan) * 100).fillna(0).round(1)
     
-    total_dep = dep_summary["Total_Balance"].sum()
-    dep_summary["Portfolio Share (%)"] = (dep_summary["Total_Balance"] / total_dep * 100).round(2)
+    st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
-    st.subheader("📋 Deposit Breakdown by Category")
-    st.data_editor(dep_summary, num_rows="dynamic", use_container_width=True, key="deposit_template_table")
+with tab3:
+    st.subheader("3. Digital Customer & E-Banking Adoption by Branch Network")
+    digital_summary = df[["__BranchCode", "__BranchName", "__District", "__Location", "__DigitalCust", "__PosEnd"]].copy()
+    digital_summary["Digital Share of Balance (%)"] = (digital_summary["__DigitalCust"] / digital_summary["__PosEnd"].replace(0, np.nan) * 100).round(2)
+    digital_summary = digital_summary.rename(columns={
+        "__BranchCode": "Branch Code",
+        "__BranchName": "Branch Name",
+        "__District": "District",
+        "__Location": "Location",
+        "__DigitalCust": "Digital Active Customers",
+        "__PosEnd": "Period-End Position"
+    })
+    st.data_editor(digital_summary, num_rows="dynamic", use_container_width=True, key="digital_summary_t")
 
-# ==========================================
-# TEMPLATE 4: CUSTOMER SEGMENTATION
-# ==========================================
-elif "Template 4" in template_choice:
-    st.markdown("## 👥 Template 4: Customer Segmentation & Group Strategy")
-    st.markdown("Evaluates institutional exposure across corporate, retail, SME, and institutional customer groups.")
-
-    cust_summary = calc_df.groupby("__Cust_Group").agg(
-        Total_Balance=("__Cur_Balance", "sum"),
-        Target_Balance=("__Target_Balance", "sum"),
-        NPL_Exposure=("__NPL", "sum")
-    ).reset_index().rename(columns={"__Cust_Group": "Customer Group / Segment"})
+with tab4:
+    st.subheader("4. Deposit Summary by Customer Business Segment (CRM, IRM, MSME, Retail)")
+    segment_summary = df.groupby("__Segment").agg(
+        Branch_Count=("__BranchName", "count"),
+        Position_Jun=("__PosStart", "sum"),
+        YTD_Actual=("__Q1Actual", "sum"),
+        Position_Sep=("__PosEnd", "sum"),
+        Digital_Cust=("__DigitalCust", "sum")
+    ).reset_index().rename(columns={"__Segment": "Business Segment"})
     
-    total_cust = cust_summary["Total_Balance"].sum()
-    cust_summary["Segment Share (%)"] = (cust_summary["Total_Balance"] / total_cust * 100).round(2)
+    segment_summary["Segment Share (%)"] = (segment_summary["Position_Sep"] / total_dep.replace(0, np.nan) * 100).fillna(0).round(1)
+    st.data_editor(segment_summary, num_rows="dynamic", use_container_width=True, key="seg_summary_t")
 
-    st.subheader("📊 Customer Group Performance Breakdown")
-    st.data_editor(cust_summary, num_rows="dynamic", use_container_width=True, key="customer_template_table")
+with tab5:
+    st.subheader("5. Top 10 & Watchlist Branch Performance Leaderboards")
+    sorted_df = df.sort_values(by="Q1 Ach (%)", ascending=False)
+    top_10 = sorted_df.head(10)[["__BranchCode", "__BranchName", "__District", "__Location", "__Q1Actual", "Q1 Ach (%)", "__DigitalCust"]]
+    least_10 = sorted_df.tail(10)[["__BranchCode", "__BranchName", "__District", "__Location", "__Q1Actual", "Q1 Ach (%)", "__DigitalCust"]]
 
-# ==========================================
-# TEMPLATE 5: MASTER DATA INSPECTOR & EXPORT
-# ==========================================
-else:
-    st.markdown("## 📂 Template 5: Master Data Inspector & Export Hub")
-    st.markdown("View, edit, and export your complete master dataset with all original headings and rows intact.")
+    col_l1, col_l2 = st.columns(2)
+    with col_l1:
+        st.markdown("##### 🌟 Top 10 Performing Branches")
+        st.data_editor(top_10, num_rows="dynamic", use_container_width=True, key="top10_b")
+    with col_l2:
+        st.markdown("##### ⚠️ Least 10 Watchlist Branches")
+        st.data_editor(least_10, num_rows="dynamic", use_container_width=True, key="least10_b")
 
-    st.subheader(f"Master Dataset Inspector ({len(user_df)} Total Rows Loaded)")
-    st.data_editor(user_df, num_rows="dynamic", use_container_width=True, key="master_inspector_table")
+with tab6:
+    st.subheader(f"6. Complete Master Dataset ({len(raw_df)} Total Rows - Zero Truncation)")
+    st.data_editor(raw_df, num_rows="dynamic", use_container_width=True, key="master_raw_t")
 
-    st.markdown("---")
-    st.subheader("📥 Export Complete Multi-Template Excel Workbook")
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        user_df.to_excel(writer, sheet_name='Master_Data', index=False)
+        raw_df.to_excel(writer, sheet_name='Master_Data', index=False)
+        district_summary.to_excel(writer, sheet_name='District_Summary', index=False)
+        product_summary.to_excel(writer, sheet_name='Product_Summary', index=False)
+        segment_summary.to_excel(writer, sheet_name='Segment_Summary', index=False)
     
     st.download_button(
-        label="📥 Download Master Report (.xlsx)",
+        label="📥 Download Complete Executive Excel Report (.xlsx)",
         data=excel_buffer.getvalue(),
         file_name=f"Executive_Bank_Master_Report_{current_period}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
