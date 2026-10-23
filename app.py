@@ -41,7 +41,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Smart Header Mapping, Granular Multi-Variable Summaries, Reports & PPT Outlines</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Accurate Group Aggregation, Clean Summaries, Reports & PPT Outlines</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -75,7 +75,7 @@ else:
     raw_df = None
 
 if raw_df is None or raw_df.empty:
-    st.info("👆 Upload your master branch files using the sidebar to generate fully linked summaries.")
+    st.info("👆 Upload your master branch files using the sidebar to generate verified summaries.")
     st.stop()
 
 # ==========================================
@@ -91,7 +91,6 @@ def match_col(possible_keywords):
                 return c
     return None
 
-# 유연한 키워드 매칭으로 실제 엑셀 열 이름 자동 탐색
 c_code = match_col(["branch code", "code", "No", "id"])
 c_name = match_col(["branch name", "branch", "name", "unit"])
 c_loc = match_col(["location", "category", "city", "outlying", "place", "area type"])
@@ -116,8 +115,8 @@ c_seg = match_col(["segment", "group", "customer", "crm", "irm", "msme", "retail
 
 df = raw_df.copy()
 
-# 데이터프레임 표준화 매핑 (값이 없으면 첫 번째 유효한 열이나 기본값 지정)
-df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else [f"BR-{i:03d}" for i in range(1, len(raw_df)+1)]
+# 표준 매핑 변수 생성 (실제 데이터의 총합을 정확히 산출하기 위함)
+df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else "N/A"
 df["__BranchName"] = raw_df[c_name].astype(str) if c_name else raw_df.iloc[:, 0].astype(str)
 df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "City"
 df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Central District"
@@ -128,7 +127,7 @@ df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(0) if c
 df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(0) if c_q_actual else 0.0
 df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(0) if c_pos_start else 0.0
 df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(0) if c_pos_end else 0.0
-df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "Saving Account"
+df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General Deposit"
 df["__CustomerSegment"] = raw_df[c_seg].astype(str) if c_seg else "Retail"
 
 df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(0) if c_mob else 0
@@ -145,7 +144,7 @@ total_prior = df["__PosStart"].sum()
 overall_growth = ((total_portfolio - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
 
 # ==========================================
-# 3. EXECUTIVE TABS & SUMMARIES
+# 3. EXECUTIVE TABS & ACCURATE SUMMARIES
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏛️ District & Location Summary", 
@@ -157,7 +156,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 with tab1:
-    st.subheader("1. Deposit Performance by District & Location Category")
+    st.subheader("1. Deposit Performance by District & Location Category (Accurate Group Sum)")
     district_summary = df.groupby(["__District", "__Location"]).agg(
         Total_Branches=("__BranchName", "count"),
         Position_Prior=("__PosStart", "sum"),
@@ -167,16 +166,16 @@ with tab1:
         Q1_Actual=("__Q1Actual", "sum"),
         Position_Current=("__PosEnd", "sum"),
         Mobile_Banking_Users=("__MobileUsers", "sum")
-    ).reset_index()
+    ).reset_index().rename(columns={"__District": "District", "__Location": "Location Category"})
 
-    district_summary["Monthly Ach (%)"] = (district_summary["Monthly_Actual"] / district_summary["Monthly_Plan"].replace(0, np.nan) * 100).round(1)
-    district_summary["Q1 Ach (%)"] = (district_summary["Q1_Actual"] / district_summary["Q1_Plan"].replace(0, np.nan) * 100).round(1)
-    district_summary["Growth (%)"] = ((district_summary["Position_Current"] - district_summary["Position_Prior"]) / district_summary["Position_Prior"].replace(0, np.nan) * 100).round(1)
+    district_summary["Monthly Ach (%)"] = (district_summary["Monthly_Actual"] / district_summary["Monthly_Plan"].replace(0, np.nan) * 100).round(1).fillna(0)
+    district_summary["Q1 Ach (%)"] = (district_summary["Q1_Actual"] / district_summary["Q1_Plan"].replace(0, np.nan) * 100).round(1).fillna(0)
+    district_summary["Growth (%)"] = ((district_summary["Position_Current"] - district_summary["Position_Prior"]) / district_summary["Position_Prior"].replace(0, np.nan) * 100).round(1).fillna(0)
 
     st.data_editor(district_summary, num_rows="dynamic", use_container_width=True, key="dist_summary_t")
 
 with tab2:
-    st.subheader("2. Deposit Breakdown by Product Type")
+    st.subheader("2. Deposit Breakdown by Product Type (Saving, Demand, Fixed Time)")
     product_summary = df.groupby("__DepositType").agg(
         Branch_Count=("__BranchName", "count"),
         Position_Prior=("__PosStart", "sum"),
@@ -190,7 +189,7 @@ with tab2:
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
 with tab3:
-    st.subheader("3. Customer Base & Digital Channels Summary")
+    st.subheader("3. Customer Base & Digital Channels Summary (Group Aggregation)")
     digital_chan_sum = df.groupby(["__District", "__Location"]).agg(
         Active_Branches=("__BranchName", "count"),
         Mobile_Banking_Users=("__MobileUsers", "sum"),
@@ -199,7 +198,7 @@ with tab3:
         POS_Deployed=("__POSDeployed", "sum"),
         QR_Merchants=("__QRMerchant", "sum"),
         QR_Deployed=("__QRDeployed", "sum")
-    ).reset_index()
+    ).reset_index().rename(columns={"__District": "District", "__Location": "Location Category"})
     st.data_editor(digital_chan_sum, num_rows="dynamic", use_container_width=True, key="dig_chan_t")
 
 with tab4:
@@ -209,13 +208,13 @@ with tab4:
         School_System_Users=("__SchoolSys", "sum"),
         Digital_Agent_Banking=("__AgentBanking", "sum"),
         Total_Deposit_Position=("__PosEnd", "sum")
-    ).reset_index()
+    ).reset_index().rename(columns={"__District": "District", "__Location": "Location Category"})
     st.data_editor(infra_sum, num_rows="dynamic", use_container_width=True, key="infra_sum_t")
 
 with tab5:
     st.subheader("5. Executive Narrative Report & Linked PPT Outline")
     
-    top_district = district_summary.iloc[0]['__District'] if not district_summary.empty else "Central District"
+    top_district = district_summary.iloc[0]['District'] if not district_summary.empty else "Central District"
     total_mobile = df["__MobileUsers"].sum()
     total_pos = df["__POSDeployed"].sum()
     total_qr = df["__QRDeployed"].sum()
@@ -270,7 +269,7 @@ SLIDE 3: DIGITAL CHANNEL & MERCHANT ECOSYSTEM
         st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
 
 with tab6:
-    st.subheader("6. Categorized Master Data Inspector (Detailed Breakdown by Domain)")
+    st.subheader("6. Categorized Master Data Inspector (Clean Domain-Specific Views)")
     
     sub_tab1, sub_tab2, sub_tab3, sub_tab4, sub_tab5 = st.tabs([
         "💰 Deposit & Position Data", 
@@ -281,22 +280,22 @@ with tab6:
     ])
 
     with sub_tab1:
-        st.markdown("##### 💰 Deposit & Position Details by Branch")
+        st.markdown("##### 💰 Deposit & Position Details")
         dep_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_saving, c_pos_start, c_m_plan, c_m_actual, c_q_plan, c_q_actual, c_pos_end] if c and c in raw_df.columns]
         st.data_editor(raw_df[dep_cols] if dep_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dep")
 
     with sub_tab2:
-        st.markdown("##### 👥 Customer & Segment Details by Branch")
+        st.markdown("##### 👥 Customer & Segment Details")
         cust_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_seg] if c and c in raw_df.columns]
         st.data_editor(raw_df[cust_cols] if cust_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_cust")
 
     with sub_tab3:
-        st.markdown("##### 📱 Digital & Merchant Channels Details by Branch")
+        st.markdown("##### 📱 Digital & Merchant Channels Details")
         dig_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_mob, c_atm, c_pos_m, c_pos_d, c_qr_m, c_qr_d] if c and c in raw_df.columns]
         st.data_editor(raw_df[dig_cols] if dig_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dig")
 
     with sub_tab4:
-        st.markdown("##### 🏫 Infrastructure & Agent Banking Details by Branch")
+        st.markdown("##### 🏫 Infrastructure & Agent Banking Details")
         infra_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_school, c_agent] if c and c in raw_df.columns]
         st.data_editor(raw_df[infra_cols] if infra_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_infra")
 
