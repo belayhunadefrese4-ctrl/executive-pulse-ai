@@ -114,7 +114,7 @@ def normalize_and_adapt_schema(input_df):
     """Auto-adapts uploaded spreadsheets with missing or alternative headers."""
     col_mapping = {}
     for col in input_df.columns:
-        c_lower = col.lower()
+        c_lower = str(col).lower()
         if "branch" in c_lower or "location" in c_lower:
             col_mapping[col] = "Branch Location"
         elif "district" in c_lower or "region" in c_lower:
@@ -164,6 +164,16 @@ def normalize_and_adapt_schema(input_df):
     if "Operating Income (ETB)" not in adapted_df.columns:
         adapted_df["Operating Income (ETB)"] = adapted_df["Current Portfolio Balance (ETB)"] * 0.08
         
+    # Clean numeric columns to eliminate NaN/nulls
+    num_fields = [
+        "Current Portfolio Balance (ETB)", "Prior Portfolio Balance (ETB)",
+        "Target Portfolio (ETB)", "Non-Performing Loans (NPL ETB)",
+        "Active Accounts", "Operating Expense (ETB)", "Operating Income (ETB)"
+    ]
+    for field in num_fields:
+        if field in adapted_df.columns:
+            adapted_df[field] = pd.to_numeric(adapted_df[field], errors="coerce").fillna(0)
+
     return adapted_df
 
 # Load & Process Data
@@ -178,8 +188,9 @@ if uploaded_file is not None and not st.session_state.file_cleared:
 else:
     df = generate_master_bank_dataset()
 
-# Calculate Portfolio Growth
-df["Portfolio Growth (%)"] = ((df["Current Portfolio Balance (ETB)"] - df["Prior Portfolio Balance (ETB)"]) / df["Prior Portfolio Balance (ETB)"] * 100).round(2)
+# Calculate Portfolio Growth safely
+prior_denom = df["Prior Portfolio Balance (ETB)"].replace(0, np.nan)
+df["Portfolio Growth (%)"] = (((df["Current Portfolio Balance (ETB)"] - df["Prior Portfolio Balance (ETB)"]) / prior_denom) * 100).fillna(0).round(2)
 
 # ==========================================
 # 3. BALANCE SHEET & CAPITAL EVALUATION
@@ -260,11 +271,16 @@ dir_summary = df.groupby("Directorate").agg({
     "Non-Performing Loans (NPL ETB)": "sum"
 }).reset_index()
 
-dir_summary["Target Achievement (%)"] = (dir_summary["Current Portfolio Balance (ETB)"] / dir_summary["Target Portfolio (ETB)"] * 100).round(2)
-dir_summary["BSC Rank"] = dir_summary["Target Achievement (%)"].rank(ascending=False, method="min").astype(int)
+target_denom = dir_summary["Target Portfolio (ETB)"].replace(0, np.nan)
+dir_summary["Target Achievement (%)"] = pd.to_numeric(
+    (dir_summary["Current Portfolio Balance (ETB)"] / target_denom * 100), errors="coerce"
+).fillna(0).round(2)
+
+# SAFE RANKING: Fills NaNs before integer casting to prevent IntCastingNaError
+dir_summary["BSC Rank"] = dir_summary["Target Achievement (%)"].rank(ascending=False, method="min").fillna(1).astype(int)
 dir_summary = dir_summary.sort_values(by="BSC Rank")
 
-overall_mission_achievement = dir_summary["Target Achievement (%)"].mean()
+overall_mission_achievement = dir_summary["Target Achievement (%)"].mean() if len(dir_summary) > 0 else 0.0
 
 m_col1, m_col2 = st.columns([1, 2])
 with m_col1:
@@ -277,13 +293,13 @@ with m_col1:
 
 with m_col2:
     st.markdown("#### Directorate BSC Performance Table")
-    # Dynamic Heading Selection Control
     selected_cols = st.multiselect(
         "Customize Table Headings (Add/Delete Columns from View):",
         options=list(dir_summary.columns),
         default=["BSC Rank", "Directorate", "Current Portfolio Balance (ETB)", "Target Portfolio (ETB)", "Target Achievement (%)"]
     )
-    st.dataframe(dir_summary[selected_cols], use_container_width=True)
+    # Allows full cell editing, row adding (+), and row deleting dynamically
+    st.data_editor(dir_summary[selected_cols], num_rows="dynamic", use_container_width=True, key="directorate_editor")
 
 # ==========================================
 # 6. BRANCH RANKINGS & AUTOMATED ACTION PLANS
@@ -298,8 +314,11 @@ branch_agg = df.groupby(["Branch Location", "District"]).agg({
     "Non-Performing Loans (NPL ETB)": "sum"
 }).reset_index()
 
-branch_agg["NPL Ratio (%)"] = (branch_agg["Non-Performing Loans (NPL ETB)"] / branch_agg["Current Portfolio Balance (ETB)"] * 100).round(2)
-branch_agg["Growth (%)"] = ((branch_agg["Current Portfolio Balance (ETB)"] - branch_agg["Prior Portfolio Balance (ETB)"]) / branch_agg["Prior Portfolio Balance (ETB)"] * 100).round(2)
+cur_denom = branch_agg["Current Portfolio Balance (ETB)"].replace(0, np.nan)
+prior_branch_denom = branch_agg["Prior Portfolio Balance (ETB)"].replace(0, np.nan)
+
+branch_agg["NPL Ratio (%)"] = ((branch_agg["Non-Performing Loans (NPL ETB)"] / cur_denom) * 100).fillna(0).round(2)
+branch_agg["Growth (%)"] = (((branch_agg["Current Portfolio Balance (ETB)"] - branch_agg["Prior Portfolio Balance (ETB)"]) / prior_branch_denom) * 100).fillna(0).round(2)
 
 sorted_branches = branch_agg.sort_values(by="Current Portfolio Balance (ETB)", ascending=False)
 top_10 = sorted_branches.head(10)
@@ -309,11 +328,21 @@ r_tab1, r_tab2, r_tab3 = st.tabs(["Top 10 Best-Performing Branches", "Least 10 P
 
 with r_tab1:
     st.subheader("🌟 Top 10 Best-Performing Branches")
-    st.dataframe(top_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]], use_container_width=True)
+    st.data_editor(
+        top_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]],
+        num_rows="dynamic",
+        use_container_width=True,
+        key="top_10_editor"
+    )
 
 with r_tab2:
     st.subheader("⚠️ Least 10 Performing Branches (Watchlist)")
-    st.dataframe(least_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]], use_container_width=True)
+    st.data_editor(
+        least_10[["Branch Location", "District", "Current Portfolio Balance (ETB)", "Growth (%)", "NPL Ratio (%)"]],
+        num_rows="dynamic",
+        use_container_width=True,
+        key="least_10_editor"
+    )
 
 with r_tab3:
     st.subheader("🛠️ Automated Action Plans for Watchlist Locations")
@@ -342,6 +371,16 @@ st.header("📄 5. Formal Executive Report & Multi-Sheet Excel Exports")
 
 ex_tab1, ex_tab2, ex_tab3 = st.tabs(["Printable Executive Summary Report", "Boardroom PPT Outline", "Multi-Sheet Excel Export"])
 
+top_dir_name = dir_summary.iloc[0]['Directorate'] if len(dir_summary) > 0 else "N/A"
+top_dir_ach = dir_summary.iloc[0]['Target Achievement (%)'] if len(dir_summary) > 0 else 0.0
+strat_dir_name = dir_summary.iloc[-1]['Directorate'] if len(dir_summary) > 0 else "N/A"
+strat_dir_ach = dir_summary.iloc[-1]['Target Achievement (%)'] if len(dir_summary) > 0 else 0.0
+
+top_branch_name = top_10.iloc[0]['Branch Location'] if len(top_10) > 0 else "N/A"
+top_branch_dist = top_10.iloc[0]['District'] if len(top_10) > 0 else "N/A"
+watch_branch_name = least_10.iloc[0]['Branch Location'] if len(least_10) > 0 else "N/A"
+watch_branch_dist = least_10.iloc[0]['District'] if len(least_10) > 0 else "N/A"
+
 with ex_tab1:
     st.subheader("📄 Boardroom Performance Report")
     formal_report = f"""
@@ -362,13 +401,13 @@ with ex_tab1:
     2. BALANCED SCORECARD (BSC) STRATEGY REALIZATION
        ---------------------------------------------------------------------------------
        • Corporate Execution Score: {overall_mission_achievement:.2f}%.
-       • Top Performing Directorate: {dir_summary.iloc[0]['Directorate']} ({dir_summary.iloc[0]['Target Achievement (%)']:.2f}% Achievement).
-       • Strategic Focus Directorate: {dir_summary.iloc[-1]['Directorate']} ({dir_summary.iloc[-1]['Target Achievement (%)']:.2f}% Achievement).
+       • Top Performing Directorate: {top_dir_name} ({top_dir_ach:.2f}% Achievement).
+       • Strategic Focus Directorate: {strat_dir_name} ({strat_dir_ach:.2f}% Achievement).
     
     3. NETWORK WATCHLIST & BRANCH INTERVENTIONS
        ---------------------------------------------------------------------------------
-       • Top Performing Branch: {top_10.iloc[0]['Branch Location']} ({top_10.iloc[0]['District']} District).
-       • Primary Watchlist Priority: {least_10.iloc[0]['Branch Location']} ({least_10.iloc[0]['District']} District).
+       • Top Performing Branch: {top_branch_name} ({top_branch_dist} District).
+       • Primary Watchlist Priority: {watch_branch_name} ({watch_branch_dist} District).
     
     ====================================================================================
     CERTIFIED BY EXECUTIVE PULSE AI | AIR-GAPPED ENTERPRISE ENGINE
@@ -386,10 +425,10 @@ with ex_tab2:
 
     SLIDE 2: BSC STRATEGY EXECUTION
     - Overall Strategy Score: {overall_mission_achievement:.2f}%.
-    - Top Directorate: {dir_summary.iloc[0]['Directorate']}.
+    - Top Directorate: {top_dir_name}.
 
     SLIDE 3: BRANCH INTERVENTIONS
-    - Watchlist Priority Location: {least_10.iloc[0]['Branch Location']}.
+    - Watchlist Priority Location: {watch_branch_name}.
     - Action Required: Deploy recovery taskforce and targeted SME deposit drives.
     """
     st.text_area("Copy PPT Outline", value=ppt_text, height=220)
@@ -397,7 +436,7 @@ with ex_tab2:
 with ex_tab3:
     st.subheader("📥 Export Master Excel Workbook")
     excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Raw_Bank_Data', index=False)
         dir_summary.to_excel(writer, sheet_name='Directorate_BSC', index=False)
         top_10.to_excel(writer, sheet_name='Top_10_Branches', index=False)
