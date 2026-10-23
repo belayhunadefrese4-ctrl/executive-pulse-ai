@@ -41,7 +41,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Full-Row Ingestion, Dynamic Channel Aggregation, Linked Summaries & Reports</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Multi-Category Inspector, Dynamic Channel Aggregation, Linked Summaries & Reports</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -75,7 +75,7 @@ else:
     raw_df = None
 
 if raw_df is None or raw_df.empty:
-    st.info("👆 Upload your master branch files using the sidebar to generate fully linked summaries.")
+    st.info("👆 Upload your master branch files using the sidebar to generate categorized master lists.")
     st.stop()
 
 # ==========================================
@@ -101,7 +101,6 @@ c_pos_start = find_header(["30 jun", "jun 2026", "prior position"])
 c_pos_end = find_header(["30 sep", "sep 2026", "current position", "position as of"])
 c_saving = find_header(["saving", "demand", "fixed", "deposit type", "product"])
 
-# 디지털 및 부가 채널 헤더 자동 감지 (유연한 키워드 매칭)
 c_mob = find_header(["mobile", "mbank", "mobil", "smartphone"])
 c_atm = find_header(["atm"])
 c_pos_m = find_header(["pos merchant", "merchant"])
@@ -110,6 +109,7 @@ c_qr_m = find_header(["qr merchant", "q merchant"])
 c_qr_d = find_header(["qr deployed", "q deployed"])
 c_school = find_header(["school", "education"])
 c_agent = find_header(["agent", "digital agent", "banking"])
+c_seg = find_header(["segment", "group", "customer", "crm", "irm", "msme", "retail"])
 
 df = raw_df.copy()
 df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else "N/A"
@@ -117,7 +117,6 @@ df["__BranchName"] = raw_df[c_name].astype(str) if c_name else "N/A"
 df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "Unspecified"
 df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Unspecified"
 
-# 수치 데이터 매핑 (없거나 비어있으면 0으로 초기화하여 연산 오류 방지)
 df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(0) if c_m_plan else 0.0
 df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(0) if c_m_actual else 0.0
 df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(0) if c_q_plan else 0.0
@@ -125,8 +124,8 @@ df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(0) 
 df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(0) if c_pos_start else 0.0
 df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(0) if c_pos_end else 0.0
 df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General Deposit"
+df["__CustomerSegment"] = raw_df[c_seg].astype(str) if c_seg else "Retail"
 
-# 디지털 채널 데이터 매핑 (마스터 데이터의 열 값을 정확히 읽고 없으면 0)
 df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(0) if c_mob else 0
 df["__ATMUsers"] = pd.to_numeric(raw_df[c_atm], errors="coerce").fillna(0) if c_atm else 0
 df["__POSMerchant"] = pd.to_numeric(raw_df[c_pos_m], errors="coerce").fillna(0) if c_pos_m else 0
@@ -136,17 +135,12 @@ df["__QRDeployed"] = pd.to_numeric(raw_df[c_qr_d], errors="coerce").fillna(0) if
 df["__SchoolSys"] = pd.to_numeric(raw_df[c_school], errors="coerce").fillna(0) if c_school else 0
 df["__AgentBanking"] = pd.to_numeric(raw_df[c_agent], errors="coerce").fillna(0) if c_agent else 0
 
-# 성과 계산
-df["Monthly Ach (%)"] = ((df["__MonthlyActual"] / df["__MonthlyPlan"].replace(0, np.nan)) * 100).fillna(0).round(1)
-df["Q1 Ach (%)"] = ((df["__Q1Actual"] / df["__Q1Plan"].replace(0, np.nan)) * 100).fillna(0).round(1)
-df["Growth From Prior (%)"] = (((df["__PosEnd"] - df["__PosStart"]) / df["__PosStart"].replace(0, np.nan)) * 100).fillna(0).round(1)
-
 total_portfolio = df["__PosEnd"].sum()
 total_prior = df["__PosStart"].sum()
 overall_growth = ((total_portfolio - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
 
 # ==========================================
-# 3. EXECUTIVE TABS & FULLY LINKED SUMMARIES
+# 3. EXECUTIVE TABS & SUMMARIES
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏛️ District & Location Summary", 
@@ -154,7 +148,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📱 Digital & Merchant Channels", 
     "🏫 School Systems & Agent Banking", 
     "📄 Linked Narrative Report & PPT",
-    "📂 Master Data Inspector"
+    "📂 Categorized Master Data Inspector"
 ])
 
 with tab1:
@@ -191,7 +185,7 @@ with tab2:
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
 with tab3:
-    st.subheader("3. Customer Base & Digital Channels Summary (Linked to Master Data)")
+    st.subheader("3. Customer Base & Digital Channels Summary")
     digital_chan_sum = df.groupby(["__District", "__Location"]).agg(
         Active_Branches=("__BranchName", "count"),
         Mobile_Banking_Users=("__MobileUsers", "sum"),
@@ -271,8 +265,54 @@ SLIDE 3: DIGITAL CHANNEL & MERCHANT ECOSYSTEM
         st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
 
 with tab6:
-    st.subheader(f"6. Master Data Inspector ({len(raw_df)} Total Rows - Zero Truncation)")
-    st.data_editor(raw_df, num_rows="dynamic", use_container_width=True, key="master_raw_view_t")
+    st.subheader("6. Categorized Master Data Inspector (Detailed Breakdown by Domain)")
+    
+    sub_tab1, sub_tab2, sub_tab3, sub_tab4, sub_tab5 = st.tabs([
+        "💰 Deposit & Position Data", 
+        "👥 Customer & Segment Data", 
+        "📱 Digital & Merchant Channels", 
+        "🏫 Infrastructure & Agents", 
+        "📂 Raw Master Data"
+    ])
+
+    with sub_tab1:
+        st.markdown("##### 💰 Deposit & Position Details by Branch")
+        dep_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__DepositType", "__PosStart", "__MonthlyPlan", "__MonthlyActual", "__Q1Plan", "__Q1Actual", "__PosEnd"] if c in df.columns]
+        st.data_editor(df[dep_cols].rename(columns={
+            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
+            "__Location": "Location", "__DepositType": "Deposit Type", "__PosStart": "Prior Position",
+            "__MonthlyPlan": "Monthly Plan", "__MonthlyActual": "Monthly Actual", "__Q1Plan": "Q1 Plan",
+            "__Q1Actual": "Q1 Actual", "__PosEnd": "Period-End Position"
+        }), num_rows="dynamic", use_container_width=True, key="insp_dep")
+
+    with sub_tab2:
+        st.markdown("##### 👥 Customer & Segment Details by Branch")
+        cust_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__CustomerSegment"] if c in df.columns]
+        st.data_editor(df[cust_cols].rename(columns={
+            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
+            "__Location": "Location", "__CustomerSegment": "Customer Segment"
+        }), num_rows="dynamic", use_container_width=True, key="insp_cust")
+
+    with sub_tab3:
+        st.markdown("##### 📱 Digital & Merchant Channels Details by Branch")
+        dig_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__MobileUsers", "__ATMUsers", "__POSMerchant", "__POSDeployed", "__QRMerchant", "__QRDeployed"] if c in df.columns]
+        st.data_editor(df[dig_cols].rename(columns={
+            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
+            "__Location": "Location", "__MobileUsers": "Mobile Users", "__ATMUsers": "ATM Users",
+            "__POSMerchant": "POS Merchant", "__POSDeployed": "POS Deployed", "__QRMerchant": "QR Merchant", "__QRDeployed": "QR Deployed"
+        }), num_rows="dynamic", use_container_width=True, key="insp_dig")
+
+    with sub_tab4:
+        st.markdown("##### 🏫 Infrastructure & Agent Banking Details by Branch")
+        infra_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__SchoolSys", "__AgentBanking"] if c in df.columns]
+        st.data_editor(df[infra_cols].rename(columns={
+            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
+            "__Location": "Location", "__SchoolSys": "School Systems", "__AgentBanking": "Digital Agent Banking"
+        }), num_rows="dynamic", use_container_width=True, key="insp_infra")
+
+    with sub_tab5:
+        st.markdown(f"##### 📂 Complete Raw Master Dataset ({len(raw_df)} Total Rows)")
+        st.data_editor(raw_df, num_rows="dynamic", use_container_width=True, key="insp_raw")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
