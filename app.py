@@ -150,7 +150,7 @@ with tab2:
     ).reset_index().rename(columns={"__DepositType": "Deposit Product Type"})
     
     total_dep = product_summary["Position_Sep"].sum()
-    product_summary["Share (%)"] = (product_summary["Position_Sep"] / total_dep.replace(0, np.nan) * 100).fillna(0).round(1)
+    product_summary["Share (%)"] = (product_summary["Position_Sep"] / (total_dep if total_dep != 0 else np.nan) * 100).fillna(0).round(1)
     
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
@@ -178,7 +178,7 @@ with tab4:
         Digital_Cust=("__DigitalCust", "sum")
     ).reset_index().rename(columns={"__Segment": "Business Segment"})
     
-    segment_summary["Segment Share (%)"] = (segment_summary["Position_Sep"] / total_dep.replace(0, np.nan) * 100).fillna(0).round(1)
+    segment_summary["Segment Share (%)"] = (segment_summary["Position_Sep"] / (total_dep if total_dep != 0 else np.nan) * 100).fillna(0).round(1)
     st.data_editor(segment_summary, num_rows="dynamic", use_container_width=True, key="seg_summary_t")
 
 with tab5:
