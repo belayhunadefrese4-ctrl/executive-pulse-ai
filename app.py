@@ -19,6 +19,9 @@ st.markdown("""
     .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
+    /* Streamlit 탭 글자 잘림 방지 및 정렬 최적화 */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] { height: 45px; white-space: pre-wrap; font-weight: 600; font-size: 0.9rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -41,7 +44,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Accurate Group Aggregation, Clean Summaries, Reports & PPT Outlines</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Multi-Variable Aggregation, Clean Summaries, Reports & PPT Outlines</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -115,7 +118,6 @@ c_seg = match_col(["segment", "group", "customer", "crm", "irm", "msme", "retail
 
 df = raw_df.copy()
 
-# 표준 매핑 변수 생성 (실제 데이터의 총합을 정확히 산출하기 위함)
 df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else "N/A"
 df["__BranchName"] = raw_df[c_name].astype(str) if c_name else raw_df.iloc[:, 0].astype(str)
 df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "City"
@@ -144,19 +146,19 @@ total_prior = df["__PosStart"].sum()
 overall_growth = ((total_portfolio - total_prior) / total_prior * 100) if total_prior > 0 else 0.0
 
 # ==========================================
-# 3. EXECUTIVE TABS & ACCURATE SUMMARIES
+# 3. EXECUTIVE TABS (글자 잘림 방지 명칭 적용)
 # ==========================================
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏛️ District & Location Summary", 
-    "💰 Deposit Breakdown by Type", 
-    "📱 Digital & Merchant Channels", 
-    "🏫 School Systems & Agent Banking", 
-    "📄 Linked Narrative Report & PPT",
-    "📂 Categorized Master Data Inspector"
+    "🏛️ District", 
+    "💰 Deposits", 
+    "📱 Digital", 
+    "🏫 Infrastructure", 
+    "📄 Report & PPT",
+    "📂 Inspector"
 ])
 
 with tab1:
-    st.subheader("1. Deposit Performance by District & Location Category (Accurate Group Sum)")
+    st.subheader("1. Deposit Performance by District & Location Category")
     district_summary = df.groupby(["__District", "__Location"]).agg(
         Total_Branches=("__BranchName", "count"),
         Position_Prior=("__PosStart", "sum"),
@@ -189,7 +191,7 @@ with tab2:
     st.data_editor(product_summary, num_rows="dynamic", use_container_width=True, key="prod_summary_t")
 
 with tab3:
-    st.subheader("3. Customer Base & Digital Channels Summary (Group Aggregation)")
+    st.subheader("3. Customer Base & Digital Channels Summary")
     digital_chan_sum = df.groupby(["__District", "__Location"]).agg(
         Active_Branches=("__BranchName", "count"),
         Mobile_Banking_Users=("__MobileUsers", "sum"),
@@ -259,61 +261,3 @@ SLIDE 3: DIGITAL CHANNEL & MERCHANT ECOSYSTEM
 - POS Deployed: {total_pos:,.0f} Units | QR Deployed: {total_qr:,.0f} Points
 - Agent Banking Outlets: {total_agents:,.0f} | School Systems: {total_school:,.0f}
 """
-
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        st.markdown("##### 📄 Linked Executive Narrative Report")
-        st.markdown(f'<div class="report-box"><pre>{narrative_text}</pre></div>', unsafe_allow_html=True)
-    with col_r2:
-        st.markdown("##### 📊 Boardroom PPT Slide Outline")
-        st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
-
-with tab6:
-    st.subheader("6. Categorized Master Data Inspector (Clean Domain-Specific Views)")
-    
-    sub_tab1, sub_tab2, sub_tab3, sub_tab4, sub_tab5 = st.tabs([
-        "💰 Deposit & Position Data", 
-        "👥 Customer & Segment Data", 
-        "📱 Digital & Merchant Channels", 
-        "🏫 Infrastructure & Agents", 
-        "📂 Raw Master Data"
-    ])
-
-    with sub_tab1:
-        st.markdown("##### 💰 Deposit & Position Details")
-        dep_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_saving, c_pos_start, c_m_plan, c_m_actual, c_q_plan, c_q_actual, c_pos_end] if c and c in raw_df.columns]
-        st.data_editor(raw_df[dep_cols] if dep_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dep")
-
-    with sub_tab2:
-        st.markdown("##### 👥 Customer & Segment Details")
-        cust_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_seg] if c and c in raw_df.columns]
-        st.data_editor(raw_df[cust_cols] if cust_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_cust")
-
-    with sub_tab3:
-        st.markdown("##### 📱 Digital & Merchant Channels Details")
-        dig_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_mob, c_atm, c_pos_m, c_pos_d, c_qr_m, c_qr_d] if c and c in raw_df.columns]
-        st.data_editor(raw_df[dig_cols] if dig_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dig")
-
-    with sub_tab4:
-        st.markdown("##### 🏫 Infrastructure & Agent Banking Details")
-        infra_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_school, c_agent] if c and c in raw_df.columns]
-        st.data_editor(raw_df[infra_cols] if infra_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_infra")
-
-    with sub_tab5:
-        st.markdown(f"##### 📂 Complete Raw Master Dataset ({len(raw_df)} Total Rows)")
-        st.data_editor(raw_df, num_rows="dynamic", use_container_width=True, key="insp_raw")
-
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        raw_df.to_excel(writer, sheet_name='Master_Data', index=False)
-        district_summary.to_excel(writer, sheet_name='District_Summary', index=False)
-        product_summary.to_excel(writer, sheet_name='Product_Summary', index=False)
-        digital_chan_sum.to_excel(writer, sheet_name='Digital_Channels', index=False)
-        infra_sum.to_excel(writer, sheet_name='Infrastructure_Summary', index=False)
-
-    st.download_button(
-        label="📥 Download Consolidated Executive Excel Report (.xlsx)",
-        data=excel_buffer.getvalue(),
-        file_name=f"Executive_Bank_Report_{reporting_period}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
