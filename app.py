@@ -41,7 +41,7 @@ if user_key != MASTER_SECURITY_KEY:
 col_title, col_sec = st.columns([3, 1])
 with col_title:
     st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Multi-Category Inspector, Dynamic Channel Aggregation, Linked Summaries & Reports</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Smart Header Mapping, Granular Multi-Variable Summaries, Reports & PPT Outlines</p>', unsafe_allow_html=True)
 with col_sec:
     st.markdown("<br><span class='security-badge'>🛡️ ENTERPRISE SECURE</span>", unsafe_allow_html=True)
 
@@ -75,47 +75,52 @@ else:
     raw_df = None
 
 if raw_df is None or raw_df.empty:
-    st.info("👆 Upload your master branch files using the sidebar to generate categorized master lists.")
+    st.info("👆 Upload your master branch files using the sidebar to generate fully linked summaries.")
     st.stop()
 
 # ==========================================
-# 2. ROBUST MAPPING & CHANNEL AGGREGATION
+# 2. SMART FUZZY HEADER MAPPING ENGINE
 # ==========================================
 cols = raw_df.columns.tolist()
 
-def find_header(keywords):
+def match_col(possible_keywords):
     for c in cols:
-        if any(k in c.lower() for k in keywords):
-            return c
+        cl = c.lower()
+        for kw in possible_keywords:
+            if kw in cl:
+                return c
     return None
 
-c_code = find_header(["branch code", "code"])
-c_name = find_header(["branch name", "branch", "unit name"])
-c_loc = find_header(["location", "category", "city", "outlying"])
-c_dist = find_header(["district", "region", "zone", "area"])
-c_m_plan = find_header(["monthly plan", "m_plan"])
-c_m_actual = find_header(["monthly actual", "m_actual"])
-c_q_plan = find_header(["q1 plan", "quarterly plan"])
-c_q_actual = find_header(["q1 actual", "quarterly actual"])
-c_pos_start = find_header(["30 jun", "jun 2026", "prior position"])
-c_pos_end = find_header(["30 sep", "sep 2026", "current position", "position as of"])
-c_saving = find_header(["saving", "demand", "fixed", "deposit type", "product"])
+# 유연한 키워드 매칭으로 실제 엑셀 열 이름 자동 탐색
+c_code = match_col(["branch code", "code", "No", "id"])
+c_name = match_col(["branch name", "branch", "name", "unit"])
+c_loc = match_col(["location", "category", "city", "outlying", "place", "area type"])
+c_dist = match_col(["district", "region", "zone", "branch district"])
+c_m_plan = match_col(["monthly plan", "m_plan", "month plan"])
+c_m_actual = match_col(["monthly actual", "m_actual", "month actual"])
+c_q_plan = match_col(["q1 plan", "quarterly plan", "quarter plan"])
+c_q_actual = match_col(["q1 actual", "quarterly actual", "quarter actual"])
+c_pos_start = match_col(["30 jun", "jun 2026", "prior", "start", "beginning"])
+c_pos_end = match_col(["30 sep", "sep 2026", "current", "position", "balance", "amount", "total"])
+c_saving = match_col(["saving", "demand", "fixed", "deposit", "product", "type"])
 
-c_mob = find_header(["mobile", "mbank", "mobil", "smartphone"])
-c_atm = find_header(["atm"])
-c_pos_m = find_header(["pos merchant", "merchant"])
-c_pos_d = find_header(["pos deployed", "pos dep"])
-c_qr_m = find_header(["qr merchant", "q merchant"])
-c_qr_d = find_header(["qr deployed", "q deployed"])
-c_school = find_header(["school", "education"])
-c_agent = find_header(["agent", "digital agent", "banking"])
-c_seg = find_header(["segment", "group", "customer", "crm", "irm", "msme", "retail"])
+c_mob = match_col(["mobile", "mbank", "mobil", "smartphone", "cell"])
+c_atm = match_col(["atm"])
+c_pos_m = match_col(["pos merchant", "merchant"])
+c_pos_d = match_col(["pos deployed", "pos dep"])
+c_qr_m = match_col(["qr merchant", "q merchant"])
+c_qr_d = match_col(["qr deployed", "q deployed"])
+c_school = match_col(["school", "education", "student"])
+c_agent = match_col(["agent", "digital agent", "banking"])
+c_seg = match_col(["segment", "group", "customer", "crm", "irm", "msme", "retail"])
 
 df = raw_df.copy()
-df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else "N/A"
-df["__BranchName"] = raw_df[c_name].astype(str) if c_name else "N/A"
-df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "Unspecified"
-df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Unspecified"
+
+# 데이터프레임 표준화 매핑 (값이 없으면 첫 번째 유효한 열이나 기본값 지정)
+df["__BranchCode"] = raw_df[c_code].astype(str) if c_code else [f"BR-{i:03d}" for i in range(1, len(raw_df)+1)]
+df["__BranchName"] = raw_df[c_name].astype(str) if c_name else raw_df.iloc[:, 0].astype(str)
+df["__Location"] = raw_df[c_loc].astype(str) if c_loc else "City"
+df["__District"] = raw_df[c_dist].astype(str) if c_dist else "Central District"
 
 df["__MonthlyPlan"] = pd.to_numeric(raw_df[c_m_plan], errors="coerce").fillna(0) if c_m_plan else 0.0
 df["__MonthlyActual"] = pd.to_numeric(raw_df[c_m_actual], errors="coerce").fillna(0) if c_m_actual else 0.0
@@ -123,7 +128,7 @@ df["__Q1Plan"] = pd.to_numeric(raw_df[c_q_plan], errors="coerce").fillna(0) if c
 df["__Q1Actual"] = pd.to_numeric(raw_df[c_q_actual], errors="coerce").fillna(0) if c_q_actual else 0.0
 df["__PosStart"] = pd.to_numeric(raw_df[c_pos_start], errors="coerce").fillna(0) if c_pos_start else 0.0
 df["__PosEnd"] = pd.to_numeric(raw_df[c_pos_end], errors="coerce").fillna(0) if c_pos_end else 0.0
-df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "General Deposit"
+df["__DepositType"] = raw_df[c_saving].astype(str) if c_saving else "Saving Account"
 df["__CustomerSegment"] = raw_df[c_seg].astype(str) if c_seg else "Retail"
 
 df["__MobileUsers"] = pd.to_numeric(raw_df[c_mob], errors="coerce").fillna(0) if c_mob else 0
@@ -277,38 +282,23 @@ with tab6:
 
     with sub_tab1:
         st.markdown("##### 💰 Deposit & Position Details by Branch")
-        dep_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__DepositType", "__PosStart", "__MonthlyPlan", "__MonthlyActual", "__Q1Plan", "__Q1Actual", "__PosEnd"] if c in df.columns]
-        st.data_editor(df[dep_cols].rename(columns={
-            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
-            "__Location": "Location", "__DepositType": "Deposit Type", "__PosStart": "Prior Position",
-            "__MonthlyPlan": "Monthly Plan", "__MonthlyActual": "Monthly Actual", "__Q1Plan": "Q1 Plan",
-            "__Q1Actual": "Q1 Actual", "__PosEnd": "Period-End Position"
-        }), num_rows="dynamic", use_container_width=True, key="insp_dep")
+        dep_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_saving, c_pos_start, c_m_plan, c_m_actual, c_q_plan, c_q_actual, c_pos_end] if c and c in raw_df.columns]
+        st.data_editor(raw_df[dep_cols] if dep_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dep")
 
     with sub_tab2:
         st.markdown("##### 👥 Customer & Segment Details by Branch")
-        cust_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__CustomerSegment"] if c in df.columns]
-        st.data_editor(df[cust_cols].rename(columns={
-            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
-            "__Location": "Location", "__CustomerSegment": "Customer Segment"
-        }), num_rows="dynamic", use_container_width=True, key="insp_cust")
+        cust_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_seg] if c and c in raw_df.columns]
+        st.data_editor(raw_df[cust_cols] if cust_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_cust")
 
     with sub_tab3:
         st.markdown("##### 📱 Digital & Merchant Channels Details by Branch")
-        dig_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__MobileUsers", "__ATMUsers", "__POSMerchant", "__POSDeployed", "__QRMerchant", "__QRDeployed"] if c in df.columns]
-        st.data_editor(df[dig_cols].rename(columns={
-            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
-            "__Location": "Location", "__MobileUsers": "Mobile Users", "__ATMUsers": "ATM Users",
-            "__POSMerchant": "POS Merchant", "__POSDeployed": "POS Deployed", "__QRMerchant": "QR Merchant", "__QRDeployed": "QR Deployed"
-        }), num_rows="dynamic", use_container_width=True, key="insp_dig")
+        dig_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_mob, c_atm, c_pos_m, c_pos_d, c_qr_m, c_qr_d] if c and c in raw_df.columns]
+        st.data_editor(raw_df[dig_cols] if dig_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_dig")
 
     with sub_tab4:
         st.markdown("##### 🏫 Infrastructure & Agent Banking Details by Branch")
-        infra_cols = [c for c in ["__BranchCode", "__BranchName", "__District", "__Location", "__SchoolSys", "__AgentBanking"] if c in df.columns]
-        st.data_editor(df[infra_cols].rename(columns={
-            "__BranchCode": "Branch Code", "__BranchName": "Branch Name", "__District": "District",
-            "__Location": "Location", "__SchoolSys": "School Systems", "__AgentBanking": "Digital Agent Banking"
-        }), num_rows="dynamic", use_container_width=True, key="insp_infra")
+        infra_cols = [c for c in [c_code, c_name, c_dist, c_loc, c_school, c_agent] if c and c in raw_df.columns]
+        st.data_editor(raw_df[infra_cols] if infra_cols else raw_df, num_rows="dynamic", use_container_width=True, key="insp_infra")
 
     with sub_tab5:
         st.markdown(f"##### 📂 Complete Raw Master Dataset ({len(raw_df)} Total Rows)")
