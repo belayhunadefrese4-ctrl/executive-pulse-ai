@@ -38,56 +38,74 @@ if user_key != MASTER_SECURITY_KEY:
     st.stop()
 
 # ==========================================
-# APP HEADER & FILE INGESTION
+# APP HEADER & MULTI-FILE INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Direct Multi-Sheet Ingestion & Executive Summary Generator</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-File & Multi-Sheet Ingestion Hub with Concurrent Inspection</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-st.sidebar.header("📥 Ingestion Hub")
-uploaded_file = st.sidebar.file_uploader("Upload Master Bank Excel/CSV", type=["xlsx", "csv"])
+st.sidebar.header("📥 Multi-File Ingestion Hub")
+uploaded_files = st.sidebar.file_uploader(
+    "Upload Multiple Excel/CSV Files", 
+    type=["xlsx", "csv"], 
+    accept_multiple_files=True
+)
 reporting_period = st.sidebar.selectbox("Reporting Period", ["Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
 sheets = {}
-if uploaded_file is not None:
+if uploaded_files:
     try:
-        if uploaded_file.name.endswith('.csv'):
-            master_df = pd.read_csv(uploaded_file).dropna(how='all').dropna(axis=1, how='all')
-            master_df.columns = [str(c).strip() for c in master_df.columns]
-            sheets["Master_Data"] = master_df
-        else:
-            xls = pd.ExcelFile(uploaded_file)
-            for s_name in xls.sheet_names:
-                s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
-                s_df.columns = [str(c).strip() for c in s_df.columns]
-                sheets[s_name] = s_df
-        st.sidebar.success(f"✅ Successfully Loaded {len(sheets)} Sheet(s) from File!")
+        for file in uploaded_files:
+            file_prefix = file.name.rsplit('.', 1)[0]
+            if file.name.endswith('.csv'):
+                df_temp = pd.read_csv(file).dropna(how='all').dropna(axis=1, how='all')
+                df_temp.columns = [str(c).strip() for c in df_temp.columns]
+                sheets[file_prefix] = df_temp
+            else:
+                xls = pd.ExcelFile(file)
+                for s_name in xls.sheet_names:
+                    s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
+                    s_df.columns = [str(c).strip() for c in s_df.columns]
+                    sheet_key = f"{file_prefix} -> {s_name}" if len(xls.sheet_names) > 1 else file_prefix
+                    sheets[sheet_key] = s_df
+        st.sidebar.success(f"✅ Successfully Loaded {len(uploaded_files)} File(s) | {len(sheets)} Total Sheet Domain(s)")
     except Exception as e:
-        st.sidebar.error(f"Error reading file: {e}")
+        st.sidebar.error(f"Error reading files: {e}")
         sheets = {}
 
 if not sheets:
-    st.info("👆 Please upload your master bank Excel spreadsheet using the sidebar uploader.")
+    st.info("👆 Please upload one or more master bank Excel or CSV files using the sidebar multi-file uploader.")
     st.stop()
 
 # Combine for overall metrics calculation
 combined_master = pd.concat(sheets.values(), ignore_index=True) if sheets else pd.DataFrame()
 
 # ==========================================
-# 2. EXECUTIVE TABS & INSPECTOR
+# 2. EXECUTIVE TABS & MULTI-SELECT INSPECTOR
 # ==========================================
 tab1, tab2, tab3 = st.tabs([
-    "📊 Sheets Inspector", 
+    "📊 Multi-Sheet Inspector", 
     "📄 Narrative & PPT",
     "📥 Download Package"
 ])
 
 with tab1:
-    st.subheader("1. Ingested Master Sheets Inspector (Zero Truncation)")
-    selected_sheet_name = st.selectbox("Select Sheet to View:", list(sheets.keys()))
-    if selected_sheet_name:
-        st.markdown(f"**Showing Sheet:** `{selected_sheet_name}` ({len(sheets[selected_sheet_name])} rows)")
-        st.data_editor(sheets[selected_sheet_name], num_rows="dynamic", use_container_width=True, key=f"inspect_{selected_sheet_name}")
+    st.subheader("1. Ingested Master Sheets Inspector (Multi-Select View)")
+    st.markdown("Select multiple sheets below to view and compare them concurrently side-by-side or stacked.")
+    
+    selected_sheets_to_view = st.multiselect(
+        "Select Sheets to Inspect:",
+        options=list(sheets.keys()),
+        default=list(sheets.keys())[:1] if sheets else []
+    )
+    
+    if selected_sheets_to_view:
+        for s_key in selected_sheets_to_view:
+            st.markdown(f"##### 📑 Sheet Domain: `{s_key}` ({len(sheets[s_key])} rows)")
+            st.data_editor(sheets[s_key], num_rows="dynamic", use_container_width=True, key=f"inspect_{s_key}")
+            st.markdown("---")
+    else:
+        st.info("Please select at least one sheet above to display its contents.")
 
 with tab2:
     st.subheader("2. Executive Narrative Report & Linked PPT Outline")
@@ -100,16 +118,16 @@ with tab2:
 EXECUTIVE REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. MASTER DATA INTEGRITY & SCOPE
+1. MASTER DATA INTEGRITY & MULTI-FILE SCOPE
    ---------------------------------------------------------------------------------
-   • Total Ingested Sheets: {total_sheets_count} active domains.
-   • Consolidated Records: {total_rows} total rows processed without truncation.
-   • All original headings and domain categories are fully preserved from source files.
+   • Total Ingested File Domains & Sheets: {total_sheets_count} active domains.
+   • Consolidated Records: {total_rows} total rows processed across multiple files.
+   • All original headings and domain categories are fully preserved from source documents.
 
 2. BOARDROOM SUMMARY
    ---------------------------------------------------------------------------------
-   • Multi-sheet architecture maintains pristine separation across branch networks, 
-     deposit categories, digital channels, and specialized infrastructure.
+   • Multi-file and multi-sheet architecture maintains pristine separation across 
+     branch networks, deposit categories, digital channels, and specialized infrastructure.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI ENGINE
@@ -119,10 +137,10 @@ CERTIFIED BY EXECUTIVE PULSE AI ENGINE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
 - Reporting Period: {reporting_period}
-- Total Processed Records: {total_rows} Rows across {total_sheets_count} Sheets
+- Total Processed Records: {total_rows} Rows across {total_sheets_count} Domains/Sheets
 
-SLIDE 2: MULTI-VARIABLE STRUCTURE
-- Direct domain segregation for Branch Networks, Deposit Categories, and Digital Channels.
+SLIDE 2: MULTI-FILE STRUCTURE
+- Concurrent multi-file ingestion for Branch Networks, Deposit Categories, and Digital Channels.
 """
 
     col_r1, col_r2 = st.columns(2)
@@ -140,7 +158,7 @@ with tab3:
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
         for s_name, s_df in sheets.items():
-            clean_name = str(s_name)[:30].replace("/", "_").replace("\\", "_")
+            clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
             s_df.to_excel(writer, sheet_name=clean_name, index=False)
 
     st.download_button(
