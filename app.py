@@ -93,7 +93,8 @@ sheet_names_list = list(sheets.keys())
 
 mapping_config = {}
 for part in particulars_list:
-    with st.sidebar.expander(f"Configure: {part}"):
+    # Expanded by default so you can see and map columns instantly
+    with st.sidebar.expander(f"Configure: {part}", expanded=True):
         sel_sheet = st.selectbox(f"Source Sheet for {part}", ["None"] + sheet_names_list, key=f"sheet_{part}")
         if sel_sheet != "None":
             df_cols = list(sheets[sel_sheet].columns)
