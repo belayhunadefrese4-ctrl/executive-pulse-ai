@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Column-Wise Detail Summation</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Robust Direct File Mapping & Position Rules</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. COLUMN-WISE SUMMATION OF DETAIL TABLES
+# 2. ROBUST COLUMN-WISE SUMMATION WITH FALLBACK MAPPING
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,46 +92,52 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def calculate_detail_column_sums(sheets_dict, keywords):
-    """Sums all numeric data rows column-by-column across matching detail sheets, ignoring text columns."""
+def extract_metrics_for_index(sheets_list, sheet_idx, keywords):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
-    matching_sheets = {}
-
-    for s_name, df in sheets_dict.items():
+    target_df = None
+    
+    # 1. Try keyword match first
+    for s_name, df in sheets_list.items():
         if any(k in s_name.lower() for k in keywords):
-            matching_sheets[s_name] = df
+            target_df = df
+            break
             
-            # Identify numeric columns (ignoring text columns like Branch Name, District, Location)
-            numeric_cols = []
-            for col in df.columns:
-                col_lower = str(col).lower()
-                if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed"]):
-                    continue
-                # Test if column holds numbers
-                converted = df[col].apply(clean_val)
-                if converted.sum() > 0:
-                # Exclude columns that look like percentage columns (values mostly <= 2 or containing %)
-                    if not all(v <= 3.0 for v in converted[converted > 0]):
-                        numeric_cols.append(col)
+    # 2. If no keyword match, fallback to sequential file mapping (File 1 -> ATM, File 2 -> Mobile Bank, etc.)
+    if target_df is None and len(sheets_list) > 0:
+        sheet_keys = list(sheets_list.keys())
+        if sheet_idx < len(sheet_keys):
+            target_df = sheets_list[sheet_keys[sheet_idx]]
+        else:
+            target_df = list(sheets_list.values())[0] # ultimate fallback to first sheet
 
-            # If we successfully isolated the metric columns (June, YTD Plan, YTD Actual, M. Plan, M. Actual)
-            if len(numeric_cols) >= 5:
-                metrics["June"] += df[numeric_cols[0]].apply(clean_val).sum()
-                metrics["YTD_Plan"] += df[numeric_cols[1]].apply(clean_val).sum()
-                metrics["YTD_Actual"] += df[numeric_cols[2]].apply(clean_val).sum()
-                metrics["M_Plan"] += df[numeric_cols[3]].apply(clean_val).sum()
-                metrics["M_Actual"] += df[numeric_cols[4]].apply(clean_val).sum()
-            elif len(numeric_cols) > 0:
-                # Fallback positional summation of the first 5 numeric columns found
-                all_num_cols = [c for c in df.columns if df[c].apply(clean_val).sum() > 0]
-                if len(all_num_cols) >= 5:
-                    metrics["June"] += df[all_num_cols[0]].apply(clean_val).sum()
-                    metrics["YTD_Plan"] += df[all_num_cols[1]].apply(clean_val).sum()
-                    metrics["YTD_Actual"] += df[all_num_cols[2]].apply(clean_val).sum()
-                    metrics["M_Plan"] += df[all_num_cols[3]].apply(clean_val).sum()
-                    metrics["M_Actual"] += df[all_num_cols[4]].apply(clean_val).sum()
+    if target_df is not None:
+        # Extract numeric columns, ignoring text/metadata columns
+        numeric_cols = []
+        for col in target_df.columns:
+            col_lower = str(col).lower()
+            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed"]):
+                continue
+            converted = target_df[col].apply(clean_val)
+            if converted.sum() > 0:
+                numeric_cols.append(col)
 
-    return metrics, matching_sheets
+        if len(numeric_cols) >= 5:
+            metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
+            metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
+            metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
+            metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
+            metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
+        elif len(numeric_cols) > 0:
+            # Fallback positional summation
+            all_num = [c for c in target_df.columns if target_df[c].apply(clean_val).sum() > 0]
+            if len(all_num) >= 5:
+                metrics["June"] = target_df[all_num[0]].apply(clean_val).sum()
+                metrics["YTD_Plan"] = target_df[all_num[1]].apply(clean_val).sum()
+                metrics["YTD_Actual"] = target_df[all_num[2]].apply(clean_val).sum()
+                metrics["M_Plan"] = target_df[all_num[3]].apply(clean_val).sum()
+                metrics["M_Actual"] = target_df[all_num[4]].apply(clean_val).sum()
+
+    return metrics, target_df
 
 particulars = [
     ("ATM", ["atm"]),
@@ -145,9 +151,9 @@ particulars = [
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, (part_name, keywords) in enumerate(particulars, 1):
-    sums, matched = calculate_detail_column_sums(sheets, keywords)
-    all_detail_sheets_dict[part_name] = matched
+for idx, (part_name, keywords) in enumerate(particulars):
+    sums, matched_df = extract_metrics_for_index(sheets, idx, keywords)
+    all_detail_sheets_dict[part_name] = {str(idx): matched_df} if matched_df is not None else {}
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = sums["June"] + sums["YTD_Actual"]
@@ -156,7 +162,7 @@ for idx, (part_name, keywords) in enumerate(particulars, 1):
     m_pct = (sums["M_Actual"] / sums["M_Plan"] * 100) if sums["M_Plan"] > 0 else 0.0
     
     summary_rows.append({
-        "#": idx,
+        "#": idx + 1,
         "Particulars / variables": part_name,
         "As of June 30, 2026": f"{sums['June']:,.0f}" if sums['June'] > 0 else "0",
         "YTD. Plan": f"{sums['YTD_Plan']:,.0f}" if sums['YTD_Plan'] > 0 else "0",
@@ -188,7 +194,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards with correct column-wise detail summation and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards with automated column summation and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -198,13 +204,13 @@ with tab2:
     matched_dict = all_detail_sheets_dict[selected_part]
     if matched_dict:
         for s_name, s_df in matched_dict.items():
-            st.markdown(f"**Source Sheet:** `{s_name}` ({len(s_df)} rows total)")
-            st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
+            if s_df is not None:
+                st.markdown(f"**Source Workbook / Sheet:** ({len(s_df)} rows total)")
+                st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
+            else:
+                st.info("No detail sheet mapped for this particular.")
     else:
-        st.info(f"Showing all loaded reference sheets for {selected_part}:")
-        for s_name, s_df in list(sheets.items())[:2]:
-            st.markdown(f"**Reference Sheet:** `{s_name}` ({len(s_df)} rows total)")
-            st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"ref_{selected_part}_{s_name}")
+        st.info("No details available.")
 
 with tab3:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -216,7 +222,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully calculated via column-wise detail summation.
+   • Summary table successfully populated with direct column mapping and automated summation.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
