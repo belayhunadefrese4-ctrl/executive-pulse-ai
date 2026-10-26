@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Dynamic Metric Extraction</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Intelligent Sequential Fallback</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. ROBUST DYNAMIC EXTRACTION ENGINE
+# 2. INTELLIGENT EXTRACTION ENGINE WITH FALLBACK
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,7 +86,7 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_dynamic(target_df):
+def extract_metrics(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
@@ -145,18 +145,24 @@ particulars_list = [
     ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"])
 ]
 
+sheet_keys = list(sheets.keys())
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, (part_name, keywords) in enumerate(particulars_list, 1):
+for idx, (part_name, keywords) in enumerate(particulars_list):
     target_df = None
     
+    # Try keyword match first
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    sums = extract_metrics_dynamic(target_df)
+    # Fallback to sequential mapping if keyword not found
+    if target_df is None and idx < len(sheet_keys):
+        target_df = sheets[sheet_keys[idx]]
+            
+    sums = extract_metrics(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -166,7 +172,7 @@ for idx, (part_name, keywords) in enumerate(particulars_list, 1):
     m_pct = (sums["M_Actual"] / sums["M_Plan"] * 100) if sums["M_Plan"] > 0 else 0.0
     
     summary_rows.append({
-        "#": idx,
+        "#": idx + 1,
         "Particulars / variables": part_name,
         "As of June 30, 2026": f"{sums['June']:,.0f}" if sums['June'] > 0 else "0",
         "YTD. Plan": f"{sums['YTD_Plan']:,.0f}" if sums['YTD_Plan'] > 0 else "0",
@@ -198,7 +204,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with dynamic metric extraction and Position = June Position + YTD Actual:")
+    st.markdown("Structured with intelligent sequential fallback and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -212,7 +218,7 @@ with tab2:
                 st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
-                st.info("No matching detail sheet uploaded for this particular.")
+                st.info("No matching detail sheet available for this particular.")
     else:
         st.info("No details available.")
 
@@ -226,7 +232,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with dynamic metric extraction.
+   • Summary table successfully generated with intelligent sequential fallback.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
