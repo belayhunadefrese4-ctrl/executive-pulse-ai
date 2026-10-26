@@ -16,12 +16,8 @@ st.markdown("""
     <style>
     .main-header { font-size: 2.2rem; font-weight: 800; color: #800020; letter-spacing: -0.5px; }
     .sub-header { font-size: 1.05rem; color: #334155; margin-bottom: 20px; }
-    .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
-    .metric-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; }
-    .stTabs [data-baseweb="tab"] { height: 45px; white-space: pre-wrap; font-weight: 600; font-size: 0.9rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Grand Total Row Extraction</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Automated Detail Table Column Summation</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +77,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. EXACT GRAND TOTAL ROW EXTRACTION ENGINE
+# 2. EXACT COLUMN-WISE DETAIL SUMMATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,39 +88,48 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_grand_total_from_file(sheets_dict, keywords, file_index):
+def calculate_exact_branch_sums(sheets_dict, keywords, file_idx):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     target_df = None
     
-    # 1. Match by keyword in sheet name
+    # 1. Match by keyword
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Match sequentially by uploaded file index if keyword not found
+    # 2. Sequential fallback if no keyword match
     if target_df is None and len(sheets_dict) > 0:
         sheet_keys = list(sheets_dict.keys())
-        if file_index < len(sheet_keys):
-            target_df = sheets_dict[sheet_keys[file_index]]
+        if file_idx < len(sheet_keys):
+            target_df = sheets_dict[sheet_keys[file_idx]]
 
     if target_df is not None:
-        # Grab the absolute last row (Grand Total row in institutional bank templates)
-        last_row = target_df.iloc[-1]
-        
-        # Extract numeric values from the last row, ignoring small numbers/percentages
-        numeric_vals = []
-        for val in last_row.values:
-            num = clean_val(val)
-            if num > 1.0:  # Ensures we pick up actual volume totals rather than percentages or indexes
-                numeric_vals.append(num)
+        # Isolate numeric columns containing branch metrics, skipping text metadata columns
+        numeric_cols = []
+        for col in target_df.columns:
+            col_lower = str(col).lower()
+            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "south", "north"]):
+                continue
+            converted = target_df[col].apply(clean_val)
+            if converted.sum() > 0:
+                numeric_cols.append(col)
 
-        if len(numeric_vals) >= 5:
-            metrics["June"] = numeric_vals[0]
-            metrics["YTD_Plan"] = numeric_vals[1]
-            metrics["YTD_Actual"] = numeric_vals[2]
-            metrics["M_Plan"] = numeric_vals[3]
-            metrics["M_Actual"] = numeric_vals[4]
+        # Sum all branch rows column-by-column
+        if len(numeric_cols) >= 5:
+            metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
+            metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
+            metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
+            metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
+            metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
+        else:
+            all_num = [c for c in target_df.columns if target_df[c].apply(clean_val).sum() > 0]
+            if len(all_num) >= 5:
+                metrics["June"] = target_df[all_num[0]].apply(clean_val).sum()
+                metrics["YTD_Plan"] = target_df[all_num[1]].apply(clean_val).sum()
+                metrics["YTD_Actual"] = target_df[all_num[2]].apply(clean_val).sum()
+                metrics["M_Plan"] = target_df[all_num[3]].apply(clean_val).sum()
+                metrics["M_Actual"] = target_df[all_num[4]].apply(clean_val).sum()
 
     return metrics, target_df
 
@@ -141,9 +146,8 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords, file_idx) in enumerate(particulars):
-    # Only extract if we have a corresponding uploaded file/sheet for this index, otherwise default to 0
     if file_idx < len(sheets):
-        sums, matched_df = extract_grand_total_from_file(sheets, keywords, file_idx)
+        sums, matched_df = calculate_exact_branch_sums(sheets, keywords, file_idx)
     else:
         sums = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
         matched_df = None
@@ -188,8 +192,8 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with tab1:
-    st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards, pulling grand totals from the final row and enforcing Position = June Position + YTD Actual:")
+    st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
+    st.markdown("Structured exactly to bank standards with automated column-wise branch summation and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -203,7 +207,7 @@ with tab2:
                 st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
-                st.info("No detail sheet uploaded for this particular yet.")
+                st.info("No detail sheet uploaded for this particular.")
     else:
         st.info("No details available.")
 
@@ -217,7 +221,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully linked to grand total rows of ingested workbooks.
+   • Summary table successfully generated via branch-level column summation.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
