@@ -16,8 +16,6 @@ st.markdown("""
     <style>
     .main-header { font-size: 2.2rem; font-weight: 800; color: #800020; letter-spacing: -0.5px; }
     .sub-header { font-size: 1.05rem; color: #334155; margin-bottom: 20px; }
-    .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
-    .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -38,7 +36,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Diagnostic Inspector</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Direct Numeric Aggregation</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -53,17 +51,14 @@ sheets = {}
 if uploaded_files:
     try:
         for file in uploaded_files:
-            file.seek(0)
             file_prefix = file.name.rsplit('.', 1)[0]
             if file.name.endswith('.csv'):
                 df_temp = pd.read_csv(file).dropna(how='all').dropna(axis=1, how='all')
-                df_temp.columns = [str(c).strip() for c in df_temp.columns]
                 sheets[file_prefix] = df_temp
             else:
                 xls = pd.ExcelFile(file)
                 for s_name in xls.sheet_names:
                     s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
-                    s_df.columns = [str(c).strip() for c in s_df.columns]
                     sheet_key = f"{file_prefix} -> {s_name}" if len(xls.sheet_names) > 1 else file_prefix
                     sheets[sheet_key] = s_df
         st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Active Sheet(s)")
@@ -76,16 +71,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# DIAGNOSTIC SIDEBAR INSPECTOR
-# ==========================================
-with st.sidebar.expander("🔍 Live Column Inspector", expanded=False):
-    for s_key, s_df in sheets.items():
-        st.markdown(f"**Sheet: `{s_key}`**")
-        st.write("Columns found:", list(s_df.columns))
-        st.write("Row count:", len(s_df))
-
-# ==========================================
-# 2. ROBUST EXTRACTION ENGINE
+# 2. DIRECT NUMERIC AGGREGATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -96,46 +82,28 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_robust(target_df):
+def extract_all_numeric_totals(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
         
-    cols = target_df.columns
-    col_map = {str(c).lower().strip(): c for c in cols}
-    
-    # Header keyword matching
-    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
-    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
-    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
-    m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c or "actual" in c)), None)
-    
-    # Fallback: collect all numeric columns ignoring metadata
-    numeric_cols = []
-    for c in cols:
-        c_low = str(c).lower()
-        if any(w in c_low for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "particulars", "code"]):
-            continue
-        col_sum = target_df[c].apply(clean_val).sum()
-        if col_sum != 0:
-            numeric_cols.append(c)
-
-    if june_col: metrics["June"] = target_df[june_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 0: metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
-
-    if ytd_plan_col: metrics["YTD_Plan"] = target_df[ytd_plan_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 1: metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
-
-    if ytd_act_col: metrics["YTD_Actual"] = target_df[ytd_act_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 2: metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
-
-    if m_plan_col: metrics["M_Plan"] = target_df[m_plan_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 3: metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
-
-    if m_act_col: metrics["M_Actual"] = target_df[m_act_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 4: metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
+    # Find all columns that contain valid numbers (ignoring text/branch metadata)
+    numeric_totals = []
+    for col in target_df.columns:
+        # Convert column values to numeric safely
+        converted = target_df[col].apply(clean_val)
+        col_sum = converted.sum()
+        # If the column has meaningful numeric data, store its sum
+        if col_sum > 0:
+            numeric_totals.append(col_sum)
             
+    # Map the found numeric totals sequentially to our standard headers
+    if len(numeric_totals) > 0: metrics["June"] = numeric_totals[0]
+    if len(numeric_totals) > 1: metrics["YTD_Plan"] = numeric_totals[1]
+    if len(numeric_totals) > 2: metrics["YTD_Actual"] = numeric_totals[2]
+    if len(numeric_totals) > 3: metrics["M_Plan"] = numeric_totals[3]
+    if len(numeric_totals) > 4: metrics["M_Actual"] = numeric_totals[4]
+    
     return metrics
 
 particulars_list = [
@@ -160,13 +128,13 @@ for idx, (part_name, keywords) in enumerate(particulars_list):
             target_df = df
             break
             
-    # 2. Sequential fallback mapping
+    # 2. Sequential fallback mapping if keyword not found
     if target_df is None and idx < len(sheet_keys):
         target_df = sheets[sheet_keys[idx]]
     elif target_df is None and len(sheet_keys) > 0:
         target_df = sheets[sheet_keys[idx % len(sheet_keys)]]
             
-    sums = extract_metrics_robust(target_df)
+    sums = extract_all_numeric_totals(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -208,7 +176,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with Diagnostic Inspector and Position = June Position + YTD Actual:")
+    st.markdown("Structured with direct numeric aggregation and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -236,7 +204,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with robust numeric extraction.
+   • Summary table generated successfully with direct numeric summation.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
