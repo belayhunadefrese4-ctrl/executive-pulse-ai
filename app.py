@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Auto-Detection & Interactive Override</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Strict Positional Column Mapping</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,70 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. AUTO-DETECTION & MAPPING HELPER
-# ==========================================
-def find_best_column(columns, keywords):
-    for col in columns:
-        col_low = str(col).lower()
-        if all(k in col_low for k in keywords):
-            return col
-    return columns[0] if len(columns) > 0 else None
-
-def auto_detect_sheet(sheet_names, part_name):
-    keywords = part_name.lower().split()
-    for s_name in sheet_names:
-        if any(k in s_name.lower() for k in keywords):
-            return s_name
-    return sheet_names[0] if len(sheet_names) > 0 else "None"
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🗺️ Interactive Data Mapping (Auto-Configured)")
-
-particulars_list = [
-    "ATM", 
-    "Mobile Bank", 
-    "POS Merchant", 
-    "QR Merchant", 
-    "Customer Base", 
-    "Balance Sheet & Deposits"
-]
-
-sheet_names_list = list(sheets.keys())
-mapping_config = {}
-
-for idx, part in enumerate(particulars_list):
-    default_sheet = auto_detect_sheet(sheet_names_list, part) if idx < len(sheet_names_list) else "None"
-    
-    with st.sidebar.expander(f"Configure: {part}", expanded=False):
-        sel_sheet = st.selectbox(f"Source Sheet for {part}", ["None"] + sheet_names_list, index=sheet_names_list.index(default_sheet)+1 if default_sheet in sheet_names_list else 0, key=f"sheet_{part}")
-        
-        if sel_sheet != "None":
-            df_cols = list(sheets[sel_sheet].columns)
-            
-            # Auto-detect standard bank columns
-            def_june = find_best_column(df_cols, ["june"])
-            def_plan = find_best_column(df_cols, ["ytd", "plan"])
-            def_act = find_best_column(df_cols, ["ytd", "actual"])
-            def_mplan = find_best_column(df_cols, ["m.", "plan"]) or find_best_column(df_cols, ["month", "plan"])
-            def_mact = find_best_column(df_cols, ["m.", "actual"]) or find_best_column(df_cols, ["month", "actual"])
-            
-            c_june = st.selectbox(f"June Position Col", df_cols, index=df_cols.index(def_june) if def_june in df_cols else 0, key=f"june_{part}")
-            c_plan = st.selectbox(f"YTD Plan Col", df_cols, index=df_cols.index(def_plan) if def_plan in df_cols else 0, key=f"plan_{part}")
-            c_act = st.selectbox(f"YTD Actual Col", df_cols, index=df_cols.index(def_act) if def_act in df_cols else 0, key=f"act_{part}")
-            c_mplan = st.selectbox(f"Monthly Plan Col", df_cols, index=df_cols.index(def_mplan) if def_mplan in df_cols else 0, key=f"mplan_{part}")
-            c_mact = st.selectbox(f"Monthly Actual Col", df_cols, index=df_cols.index(def_mact) if def_mact in df_cols else 0, key=f"mact_{part}")
-            
-            mapping_config[part] = {
-                "sheet": sel_sheet,
-                "june": c_june,
-                "plan": c_plan,
-                "act": c_act,
-                "mplan": c_mplan,
-                "mact": c_mact
-            }
-
-# ==========================================
-# 3. COMPUTATION ENGINE
+# 2. POSITIONAL SUMMATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -149,36 +86,62 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
+def extract_metrics_by_position(target_df):
+    metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
+    if target_df is None or target_df.empty:
+        return metrics
+        
+    # Standard Bank Detail Template Layout Indices:
+    # Col 4: As of June 30, 2026
+    # Col 5: YTD. Plan
+    # Col 6: YTD. Actual
+    # Col 8: M.Plan
+    # Col 9: M. Actual
+    cols = target_df.columns
+    
+    pos_indices = {
+        "June": 4 if len(cols) > 4 else 0,
+        "YTD_Plan": 5 if len(cols) > 5 else 1,
+        "YTD_Actual": 6 if len(cols) > 6 else 2,
+        "M_Plan": 8 if len(cols) > 8 else 3,
+        "M_Actual": 9 if len(cols) > 9 else 4
+    }
+    
+    for key, idx in pos_indices.items():
+        if idx < len(cols):
+            col_name = cols[idx]
+            metrics[key] = target_df[col_name].apply(clean_val).sum()
+            
+    return metrics
+
+particulars_list = [
+    ("ATM", ["atm"], 0),
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"], 1),
+    ("POS Merchant", ["pos"], 2),
+    ("QR Merchant", ["qr"], 3),
+    ("Customer Base", ["customer", "cb", "segment"], 4),
+    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"], 5)
+]
+
+sheet_keys = list(sheets.keys())
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, part_name in enumerate(particulars_list, 1):
-    sums = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
-    matched_df = None
+for idx, (part_name, keywords, default_file_idx) in enumerate(particulars_list, 1):
+    target_df = None
     
-    # If not explicitly mapped in expander, use auto-assignment fallback
-    if part_name not in mapping_config and idx <= len(sheet_names_list):
-        auto_s = sheet_names_list[idx - 1]
-        df_cols = list(sheets[auto_s].columns)
-        mapping_config[part_name] = {
-            "sheet": auto_s,
-            "june": find_best_column(df_cols, ["june"]),
-            "plan": find_best_column(df_cols, ["ytd", "plan"]),
-            "act": find_best_column(df_cols, ["ytd", "actual"]),
-            "mplan": find_best_column(df_cols, ["m.", "plan"]),
-            "mact": find_best_column(df_cols, ["m.", "actual"])
-        }
-
-    if part_name in mapping_config:
-        cfg = mapping_config[part_name]
-        matched_df = sheets[cfg["sheet"]]
-        sums["June"] = matched_df[cfg["june"]].apply(clean_val).sum()
-        sums["YTD_Plan"] = matched_df[cfg["plan"]].apply(clean_val).sum()
-        sums["YTD_Actual"] = matched_df[cfg["act"]].apply(clean_val).sum()
-        sums["M_Plan"] = matched_df[cfg["mplan"]].apply(clean_val).sum()
-        sums["M_Actual"] = matched_df[cfg["mact"]].apply(clean_val).sum()
+    # 1. Match by keyword in sheet name
+    for s_name, df in sheets.items():
+        if any(k in s_name.lower() for k in keywords):
+            target_df = df
+            break
+            
+    # 2. Fallback to sequential file mapping if keyword not found
+    if target_df is None and default_file_idx < len(sheet_keys):
+        target_df = sheets[sheet_keys[default_file_idx]]
         
-    all_detail_sheets_dict[part_name] = {part_name: matched_df} if matched_df is not None else {}
+    sums = extract_metrics_by_position(target_df)
+    all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = sums["June"] + sums["YTD_Actual"]
@@ -208,7 +171,7 @@ exec_summary_df.columns = [
 ]
 
 # ==========================================
-# 4. EXECUTIVE DASHBOARD TABS
+# 3. EXECUTIVE DASHBOARD TABS
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Executive Summary Table",
@@ -219,12 +182,12 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Auto-mapped and calculated with Position = June Position + YTD Actual:")
+    st.markdown("Structured with strict positional column mapping and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
-    selected_part = st.selectbox("Select Particulars / Variable to Inspect:", particulars_list)
+    selected_part = st.selectbox("Select Particulars / Variable to Inspect:", [p[0] for p in particulars_list])
     
     matched_dict = all_detail_sheets_dict[selected_part]
     if matched_dict:
@@ -247,7 +210,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table auto-populated and verified against source detail workbooks.
+   • Summary table successfully generated using strict positional column extraction.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
