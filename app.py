@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Automated Detail Table Column Summation</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Precise Header & Column Mapping</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -77,7 +77,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. EXACT COLUMN-WISE DETAIL SUMMATION ENGINE
+# 2. PRECISE COLUMN MAPPING & SUMMATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,7 +92,7 @@ def calculate_exact_branch_sums(sheets_dict, keywords, file_idx):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     target_df = None
     
-    # 1. Match by keyword
+    # 1. Match by keyword in sheet/file name
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
@@ -105,31 +105,49 @@ def calculate_exact_branch_sums(sheets_dict, keywords, file_idx):
             target_df = sheets_dict[sheet_keys[file_idx]]
 
     if target_df is not None:
-        # Isolate numeric columns containing branch metrics, skipping text metadata columns
-        numeric_cols = []
-        for col in target_df.columns:
-            col_lower = str(col).lower()
-            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "south", "north"]):
+        col_map = {str(c).lower().strip(): c for c in target_df.columns}
+        
+        # Identify columns by header text
+        june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
+        ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
+        ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and "actual" in c), None)
+        m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
+        m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "actual" in c), None)
+        
+        # Filter out text/metadata columns for positional fallback
+        numeric_df_cols = []
+        for c in target_df.columns:
+            c_low = str(c).lower()
+            if any(w in c_low for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "south", "north"]):
                 continue
-            converted = target_df[col].apply(clean_val)
-            if converted.sum() > 0:
-                numeric_cols.append(col)
+            if target_df[c].apply(clean_val).sum() > 0:
+                numeric_df_cols.append(c)
 
-        # Sum all branch rows column-by-column
-        if len(numeric_cols) >= 5:
-            metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
-            metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
-            metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
-            metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
-            metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
-        else:
-            all_num = [c for c in target_df.columns if target_df[c].apply(clean_val).sum() > 0]
-            if len(all_num) >= 5:
-                metrics["June"] = target_df[all_num[0]].apply(clean_val).sum()
-                metrics["YTD_Plan"] = target_df[all_num[1]].apply(clean_val).sum()
-                metrics["YTD_Actual"] = target_df[all_num[2]].apply(clean_val).sum()
-                metrics["M_Plan"] = target_df[all_num[3]].apply(clean_val).sum()
-                metrics["M_Actual"] = target_df[all_num[4]].apply(clean_val).sum()
+        # Assign values with header priority, fallback to strict column position order
+        if june_col and june_col in target_df.columns:
+            metrics["June"] = target_df[june_col].apply(clean_val).sum()
+        elif len(numeric_df_cols) >= 1:
+            metrics["June"] = target_df[numeric_df_cols[0]].apply(clean_val).sum()
+
+        if ytd_plan_col and ytd_plan_col in target_df.columns:
+            metrics["YTD_Plan"] = target_df[ytd_plan_col].apply(clean_val).sum()
+        elif len(numeric_df_cols) >= 2:
+            metrics["YTD_Plan"] = target_df[numeric_df_cols[1]].apply(clean_val).sum()
+
+        if ytd_act_col and ytd_act_col in target_df.columns:
+            metrics["YTD_Actual"] = target_df[ytd_act_col].apply(clean_val).sum()
+        elif len(numeric_df_cols) >= 3:
+            metrics["YTD_Actual"] = target_df[numeric_df_cols[2]].apply(clean_val).sum()
+
+        if m_plan_col and m_plan_col in target_df.columns:
+            metrics["M_Plan"] = target_df[m_plan_col].apply(clean_val).sum()
+        elif len(numeric_df_cols) >= 4:
+            metrics["M_Plan"] = target_df[numeric_df_cols[3]].apply(clean_val).sum()
+
+        if m_act_col and m_act_col in target_df.columns:
+            metrics["M_Actual"] = target_df[m_act_col].apply(clean_val).sum()
+        elif len(numeric_df_cols) >= 5:
+            metrics["M_Actual"] = target_df[numeric_df_cols[4]].apply(clean_val).sum()
 
     return metrics, target_df
 
@@ -193,7 +211,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured exactly to bank standards with automated column-wise branch summation and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards with correct column mapping and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -221,7 +239,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated via branch-level column summation.
+   • Summary table successfully generated with exact header and column mapping.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
