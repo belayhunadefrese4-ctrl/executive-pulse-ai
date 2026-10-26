@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Intelligent Sequential Fallback</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Universal File Ingestion</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. INTELLIGENT EXTRACTION ENGINE WITH FALLBACK
+# 2. UNIVERSAL EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,21 +86,21 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics(target_df):
+def extract_metrics_universal(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
         
     col_map = {str(c).lower().strip(): c for c in target_df.columns}
     
-    # 1. Header name lookup
+    # Header name lookup
     june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
     ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
     ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
     m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
     m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c or "actual" in c)), None)
     
-    # 2. Dynamic numeric column sequence fallback (ignoring metadata & text columns)
+    # Numeric column fallback
     numeric_cols = []
     for c in target_df.columns:
         c_low = str(c).lower()
@@ -152,15 +152,18 @@ all_detail_sheets_dict = {}
 for idx, (part_name, keywords) in enumerate(particulars_list):
     target_df = None
     
-    # Try keyword match first
+    # 1. Try keyword match
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # Fallback to sequential mapping if keyword not found
+    # 2. Universal sequential fallback: assign uploaded files in order
     if target_df is None and idx < len(sheet_keys):
         target_df = sheets[sheet_keys[idx]]
+    elif target_df is None and len(sheet_keys) > 0:
+        # Wrap around if more particulars than files
+        target_df = sheets[sheet_keys[idx % len(sheet_keys)]]
             
     sums = extract_metrics(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
@@ -204,7 +207,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with intelligent sequential fallback and Position = June Position + YTD Actual:")
+    st.markdown("Structured with universal file ingestion and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -218,7 +221,7 @@ with tab2:
                 st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
-                st.info("No matching detail sheet available for this particular.")
+                st.info("No detail sheet available.")
     else:
         st.info("No details available.")
 
@@ -232,7 +235,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with intelligent sequential fallback.
+   • Summary table successfully generated with universal file ingestion.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
