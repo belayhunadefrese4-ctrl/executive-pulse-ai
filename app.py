@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Variable Roll-up & Automated Summary Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Variable Roll-up & Positional Extraction Engine</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -62,7 +62,7 @@ def load_clean_table(file, sheet_name=None):
     header_idx = 0
     for idx, row in df_raw.iterrows():
         row_str = " ".join([str(val).lower() for val in row.values if pd.notna(val)])
-        if any(k in row_str for k in ["june", "jun", "ytd", "plan", "actual", "particular", "variable", "description", "item"]):
+        if any(k in row_str for k in ["june", "jun", "ytd", "plan", "actual", "particular", "variable", "description", "item", "branch"]):
             header_idx = idx
             break
             
@@ -93,7 +93,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. SHEET-LEVEL ROLL-UP & SUMMARY ENGINE
+# 2. POSITIONAL PARSING & METRIC EXTRACTION
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -105,11 +105,6 @@ def clean_val(val):
         return 0.0
 
 summary_rows = []
-total_june = 0.0
-total_ytd_plan = 0.0
-total_ytd_act = 0.0
-total_m_plan = 0.0
-total_m_act = 0.0
 
 for idx, (s_key, df) in enumerate(sheets.items()):
     if df is None or df.empty:
@@ -118,36 +113,25 @@ for idx, (s_key, df) in enumerate(sheets.items()):
     cols = list(df.columns)
     col_map = {str(c).lower().strip(): c for c in cols}
     
-    # Identify metric columns flexibly
-    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
-    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
-    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
-    m_plan_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and ("act" in c or "actual" in c)), None)
+    # Identify Name / Particulars column
+    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name", "type", "branch"])), cols[0])
     
-    # Positional fallback for numeric columns (excluding non-metric columns)
-    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name", "type"])), cols[0])
-    numeric_cols = [c for c in cols if c != part_col and not any(w in str(c).lower() for w in ["branch", "district", "location", "code", "#", "unnamed"])]
+    # Extract numeric columns strictly in sequence after the particulars column
+    numeric_cols = [c for c in cols if c != part_col and not any(w in str(c).lower() for w in ["code", "#", "unnamed"])]
     
-    if not june_col and len(numeric_cols) > 0: june_col = numeric_cols[0]
-    if not ytd_plan_col and len(numeric_cols) > 1: ytd_plan_col = numeric_cols[1]
-    if not ytd_act_col and len(numeric_cols) > 2: ytd_act_col = numeric_cols[2]
-    if not m_plan_col and len(numeric_cols) > 3: m_plan_col = numeric_cols[3]
-    if not m_act_col and len(numeric_cols) > 4: m_act_col = numeric_cols[4]
+    # Assign positional metrics: [June, YTD Plan, YTD Actual, M Plan, M Actual]
+    june_col = numeric_cols[0] if len(numeric_cols) > 0 else None
+    ytd_plan_col = numeric_cols[1] if len(numeric_cols) > 1 else None
+    ytd_act_col = numeric_cols[2] if len(numeric_cols) > 2 else None
+    m_plan_col = numeric_cols[3] if len(numeric_cols) > 3 else None
+    m_act_col = numeric_cols[4] if len(numeric_cols) > 4 else None
 
-    # Calculate total sums for this specific sheet/variable
+    # Calculate total sums for this specific variable sheet
     s_june = df[june_col].apply(clean_val).sum() if june_col and june_col in df.columns else 0.0
     s_ytd_plan = df[ytd_plan_col].apply(clean_val).sum() if ytd_plan_col and ytd_plan_col in df.columns else 0.0
     s_ytd_act = df[ytd_act_col].apply(clean_val).sum() if ytd_act_col and ytd_act_col in df.columns else 0.0
     s_m_plan = df[m_plan_col].apply(clean_val).sum() if m_plan_col and m_plan_col in df.columns else 0.0
     s_m_act = df[m_act_col].apply(clean_val).sum() if m_act_col and m_act_col in df.columns else 0.0
-
-    # Accumulate grand totals
-    total_june += s_june
-    total_ytd_plan += s_ytd_plan
-    total_ytd_act += s_ytd_act
-    total_m_plan += s_m_plan
-    total_m_act += s_m_act
 
     # Mandatory Banking Calculation Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = s_june + s_ytd_act
@@ -166,24 +150,6 @@ for idx, (s_key, df) in enumerate(sheets.items()):
         "%age.1": f"{m_pct:.0f}%",
         "Position As of August 31, 2026": f"{position_august:,.0f}"
     })
-
-# Append Grand Total Row automatically computed by the platform
-grand_total_position = total_june + total_ytd_act
-grand_ytd_pct = (total_ytd_act / total_ytd_plan * 100) if total_ytd_plan > 0 else 0.0
-grand_m_pct = (total_m_act / total_m_plan * 100) if total_m_plan > 0 else 0.0
-
-summary_rows.append({
-    "#": "Total",
-    "Particulars / variables": "GRAND TOTAL",
-    "As of June 30, 2026": f"{total_june:,.0f}",
-    "YTD. Plan": f"{total_ytd_plan:,.0f}",
-    "YTD. Actual": f"{total_ytd_act:,.0f}",
-    "%age": f"{grand_ytd_pct:.0f}%",
-    "M.Plan": f"{total_m_plan:,.0f}",
-    "M. Actual": f"{total_m_act:,.0f}",
-    "%age.1": f"{grand_m_pct:.0f}%",
-    "Position As of August 31, 2026": f"{grand_total_position:,.0f}"
-})
 
 exec_summary_df = pd.DataFrame(summary_rows)
 exec_summary_df.columns = [
@@ -205,15 +171,28 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Master Summary Roll-up (Each variable sheet's total sum with automated Grand Total):")
+    st.markdown("Master Summary Roll-up (Each variable sheet's total sum — No mixed grand totals):")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
     selected_sheet = st.selectbox("Select Variable Sheet to Inspect Details:", list(sheets.keys()))
     if selected_sheet in sheets:
-        st.markdown(f"**Showing full detail rows for `{selected_sheet}`:**")
-        st.data_editor(sheets[selected_sheet], num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
+        st.markdown(f"**Showing full detail rows and automated total for `{selected_sheet}`:**")
+        
+        # Display detail df with an added Total row at the bottom
+        detail_df = sheets[selected_sheet].copy()
+        
+        # Calculate numeric column sums for this detail sheet
+        numeric_cols_detail = [c for c in detail_df.columns if c != detail_df.columns[0]]
+        total_row = {detail_df.columns[0]: "TOTAL"}
+        for c in detail_df.columns:
+            if c != detail_df.columns[0]:
+                col_sum = detail_df[c].apply(clean_val).sum()
+                total_row[c] = f"{col_sum:,.0f}" if col_sum > 0 else "-"
+            
+        detail_df = pd.concat([detail_df, pd.DataFrame([total_row])], ignore_index=True)
+        st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -226,7 +205,6 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX
    ---------------------------------------------------------------------------------
    • Master summary compiled successfully from multi-variable sheet totals.
-   • Grand Total automatically aggregated across all active variable sheets.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -237,7 +215,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual, and Grand Totals.
+- Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
 """
 
     col_r1, col_r2 = st.columns(2)
