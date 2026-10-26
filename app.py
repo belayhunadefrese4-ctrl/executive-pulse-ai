@@ -49,7 +49,6 @@ uploaded_files = st.sidebar.file_uploader(
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-# Helper to automatically find the real table start row (bypassing title rows)
 def load_clean_dataframe(file, sheet_name=None):
     file.seek(0)
     if file.name.endswith('.csv'):
@@ -59,7 +58,6 @@ def load_clean_dataframe(file, sheet_name=None):
         
     df_raw = df_raw.dropna(how='all').dropna(axis=1, how='all')
     
-    # Locate header row: search for rows containing key financial terms
     header_idx = 0
     for idx, row in df_raw.iterrows():
         row_str = " ".join([str(val).lower() for val in row.values if pd.notna(val)])
@@ -67,7 +65,6 @@ def load_clean_dataframe(file, sheet_name=None):
             header_idx = idx
             break
             
-    # Set headers and slice clean data
     headers = [str(val).strip() for val in df_raw.iloc[header_idx].values]
     df_clean = df_raw.iloc[header_idx + 1:].copy()
     df_clean.columns = headers
@@ -111,7 +108,6 @@ def extract_metrics_flexible(target_df):
     if target_df is None or target_df.empty:
         return metrics
         
-    # Find all numeric columns with valid non-zero totals
     numeric_sums = []
     for c in target_df.columns:
         c_low = str(c).lower()
@@ -121,7 +117,6 @@ def extract_metrics_flexible(target_df):
         if c_sum > 0:
             numeric_sums.append(c_sum)
 
-    # Assign from left to right across valid numeric columns
     if len(numeric_sums) > 0: metrics["June"] = numeric_sums[0]
     if len(numeric_sums) > 1: metrics["YTD_Plan"] = numeric_sums[1]
     if len(numeric_sums) > 2: metrics["YTD_Actual"] = numeric_sums[2]
@@ -146,13 +141,11 @@ all_detail_sheets_dict = {}
 for idx, (part_name, keywords) in enumerate(particulars_list):
     target_df = None
     
-    # 1. Match by keyword
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Fallback to sequential file mapping
     if target_df is None and idx < len(sheet_keys):
         target_df = sheets[sheet_keys[idx]]
     elif target_df is None and len(sheet_keys) > 0:
@@ -161,7 +154,6 @@ for idx, (part_name, keywords) in enumerate(particulars_list):
     sums = extract_metrics_flexible(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
-    # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = sums["June"] + sums["YTD_Actual"]
     
     ytd_pct = (sums["YTD_Actual"] / sums["YTD_Plan"] * 100) if sums["YTD_Plan"] > 0 else 0.0
@@ -219,3 +211,51 @@ with tab2:
         st.info("No details available.")
 
 with tab3:
+    st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
+    
+    narrative_text = f"""
+====================================================================================
+COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
+====================================================================================
+
+1. EXECUTIVE SUMMARY MATRIX
+   ---------------------------------------------------------------------------------
+   • Summary table successfully generated with automated header row detection.
+   • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
+
+====================================================================================
+CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
+====================================================================================
+"""
+
+    ppt_outline = f"""
+SLIDE 1: INSTITUTIONAL PERFORMANCE MATRIX ({reporting_period})
+- Standardized Particulars Breakdown (ATM, Mobile Bank, POS, QR, Customer Base, Balance Sheet).
+- Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
+"""
+
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        st.markdown("##### 📄 Boardroom Executive Report")
+        st.markdown(f'<div class="report-box"><pre>{narrative_text}</pre></div>', unsafe_allow_html=True)
+    with col_r2:
+        st.markdown("##### 📊 Boardroom PPT Slide Outline")
+        st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
+
+with tab4:
+    st.subheader("📥 Download Master Package")
+    st.markdown("Download the fully structured Excel workbook containing the standardized summary table as the first sheet.")
+
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        exec_summary_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
+        for s_name, s_df in sheets.items():
+            clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
+            s_df.to_excel(writer, sheet_name=clean_name, index=False)
+
+    st.download_button(
+        label="📥 Download Complete Enterprise Multi-Sheet Package (.xlsx)",
+        data=excel_buffer.getvalue(),
+        file_name=f"Enterprise_Bank_Package_{reporting_period}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
