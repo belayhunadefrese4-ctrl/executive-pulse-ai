@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Row-Level Matching & Position Rules</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Summary Row Extraction</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. ROW-LEVEL MATCHING & EXACT METRIC EXTRACTION
+# 2. EXTRACTING SUMMARY ROW TOTALS DIRECTLY
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,48 +92,36 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_row_metrics(sheets_dict, keywords):
-    """Scans all dataframes row-by-row to find the exact matching particular and extract its numeric columns."""
+def extract_summary_row_metrics(sheets_dict, keywords):
+    """Scans for the summary/total row at the bottom of the detail table, or calculates column sums."""
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     matching_sheets = {}
-    found = False
+    found_summary = False
 
     for s_name, df in sheets_dict.items():
-        for idx, row in df.iterrows():
-            row_text = " ".join([str(val).lower() for val in row.values])
-            # Check if row contains the specific keyword
-            if any(k in row_text for k in keywords):
-                matching_sheets[s_name] = df
-                found = True
+        if any(k in s_name.lower() for k in keywords):
+            matching_sheets[s_name] = df
+            
+            # Search from the bottom up for a summary/total row or the last row
+            for idx in reversed(df.index):
+                row = df.loc[idx]
+                row_text = " ".join([str(val).lower() for val in row.values])
                 
-                # Extract all numeric values from this specific row
-                numeric_vals = []
-                for val in row.values:
-                    num = clean_val(val)
-                    if num > 0:
-                        numeric_vals.append(num)
-                
-                # Map numeric values sequentially: [June, YTD Plan, YTD Actual, M Plan, M Actual]
-                if len(numeric_vals) >= 5:
-                    metrics["June"] += numeric_vals[0]
-                    metrics["YTD_Plan"] += numeric_vals[1]
-                    metrics["YTD_Actual"] += numeric_vals[2]
-                    metrics["M_Plan"] += numeric_vals[3]
-                    metrics["M_Actual"] += numeric_vals[4]
-                elif len(numeric_vals) == 4:
-                    metrics["June"] += numeric_vals[0]
-                    metrics["YTD_Plan"] += numeric_vals[1]
-                    metrics["YTD_Actual"] += numeric_vals[2]
-                    metrics["M_Actual"] += numeric_vals[3]
-                break
-        if found:
-            break
-
-    # Fallback if row-level search didn't trigger, use sheet-level totals
-    if not found:
-        for s_name, df in sheets_dict.items():
-            if any(k in s_name.lower() for k in keywords):
-                matching_sheets[s_name] = df
+                # If row is a total/summary row or the last row of the dataset
+                if "total" in row_text or "sum" in row_text or idx == df.index[-1]:
+                    numeric_vals = [clean_val(val) for val in row.values if clean_val(val) > 0]
+                    
+                    if len(numeric_vals) >= 5:
+                        metrics["June"] += numeric_vals[0]
+                        metrics["YTD_Plan"] += numeric_vals[1]
+                        metrics["YTD_Actual"] += numeric_vals[2]
+                        metrics["M_Plan"] += numeric_vals[3]
+                        metrics["M_Actual"] += numeric_vals[4]
+                        found_summary = True
+                        break
+            
+            if not found_summary:
+                # Fallback: sum all numeric columns if no explicit total row text is found
                 num_cols = [c for c in df.columns if df[c].apply(clean_val).sum() > 0]
                 if len(num_cols) >= 5:
                     col_sums = [df[c].apply(clean_val).sum() for c in num_cols[:5]]
@@ -158,7 +146,7 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords) in enumerate(particulars, 1):
-    sums, matched = extract_row_metrics(sheets, keywords)
+    sums, matched = extract_summary_row_metrics(sheets, keywords)
     all_detail_sheets_dict[part_name] = matched
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -200,7 +188,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards with correct row-level matching and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards, extracting the final summary totals from detail workbooks:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -228,7 +216,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully matched row-by-row with detail workbooks.
+   • Summary table successfully linked to the final summary row totals of detail workbooks.
    • Position As of August 31, 2026 calculated precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
