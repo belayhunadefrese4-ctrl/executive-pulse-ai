@@ -49,7 +49,8 @@ uploaded_files = st.sidebar.file_uploader(
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-def load_clean_dataframe(file, sheet_name=None):
+# Automated header detection parser
+def load_clean_table(file, sheet_name=None):
     file.seek(0)
     if file.name.endswith('.csv'):
         df_raw = pd.read_csv(file, header=None)
@@ -61,7 +62,7 @@ def load_clean_dataframe(file, sheet_name=None):
     header_idx = 0
     for idx, row in df_raw.iterrows():
         row_str = " ".join([str(val).lower() for val in row.values if pd.notna(val)])
-        if any(k in row_str for k in ["june", "ytd", "plan", "actual", "particular", "variable", "description"]):
+        if any(k in row_str for k in ["june", "jun", "ytd", "plan", "actual", "particular", "variable", "description", "item"]):
             header_idx = idx
             break
             
@@ -76,12 +77,12 @@ if uploaded_files:
         for file in uploaded_files:
             file_prefix = file.name.rsplit('.', 1)[0]
             if file.name.endswith('.csv'):
-                sheets[file_prefix] = load_clean_dataframe(file)
+                sheets[file_prefix] = load_clean_table(file)
             else:
                 xls = pd.ExcelFile(file)
                 for s_name in xls.sheet_names:
                     sheet_key = f"{file_prefix} -> {s_name}" if len(xls.sheet_names) > 1 else file_prefix
-                    sheets[sheet_key] = load_clean_dataframe(file, sheet_name=s_name)
+                    sheets[sheet_key] = load_clean_table(file, sheet_name=s_name)
         st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Active Sheet(s)")
     except Exception as e:
         st.sidebar.error(f"Error loading files: {e}")
@@ -92,29 +93,29 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. TRUE DYNAMIC ROW-LEVEL EXTRACTION
+# 2. TRUE DYNAMIC ROW-LEVEL EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
         return 0.0
-    val_str = str(val).replace(',', '').replace('%', '').replace(' ', '').strip()
+    val_str = str(val).replace(',', '').replace('%', '').replace(' ', '').replace('-', '0').strip()
     try:
         return float(val_str)
     except ValueError:
         return 0.0
 
-combined_rows = []
+extracted_rows = []
 row_counter = 1
 
 for s_key, df in sheets.items():
     if df is None or df.empty:
         continue
         
-    cols = df.columns
+    cols = list(df.columns)
     col_map = {str(c).lower().strip(): c for c in cols}
     
     # Identify Particulars/Description column
-    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name"])), None)
+    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name", "type"])), None)
     if not part_col and len(cols) > 0:
         for c in cols:
             if df[c].dtype == object:
@@ -123,13 +124,14 @@ for s_key, df in sheets.items():
         if not part_col:
             part_col = cols[0]
 
-    # Identify metric columns
+    # Identify metric columns flexibly
     june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
     ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
     ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
-    m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c or "actual" in c)), None)
+    m_plan_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and "plan" in c), None)
+    m_act_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and ("act" in c or "actual" in c)), None)
     
+    # Positional fallback for numeric columns
     numeric_cols = [c for c in cols if c != part_col and not any(w in str(c).lower() for w in ["branch", "district", "location", "code", "#", "unnamed"])]
     
     if not june_col and len(numeric_cols) > 0: june_col = numeric_cols[0]
@@ -138,10 +140,10 @@ for s_key, df in sheets.items():
     if not m_plan_col and len(numeric_cols) > 3: m_plan_col = numeric_cols[3]
     if not m_act_col and len(numeric_cols) > 4: m_act_col = numeric_cols[4]
 
-    # Extract each individual row from the uploaded file as a distinct variable
+    # Extract each individual row as a distinct variable/particular
     for idx, row in df.iterrows():
         p_name = str(row[part_col]).strip() if part_col in df.columns and pd.notna(row[part_col]) else f"Item {row_counter}"
-        if not p_name or p_name.lower() in ["nan", "none", "total", "grand total", "sum"]:
+        if not p_name or p_name.lower() in ["nan", "none", "total", "grand total", "sum", "subtotal", "overall"]:
             continue
             
         june_val = clean_val(row[june_col]) if june_col and june_col in df.columns else 0.0
@@ -150,11 +152,13 @@ for s_key, df in sheets.items():
         m_plan_val = clean_val(row[m_plan_col]) if m_plan_col and m_plan_col in df.columns else 0.0
         m_act_val = clean_val(row[m_act_col]) if m_act_col and m_act_col in df.columns else 0.0
         
+        # Mandatory Banking Calculation Rule: Position As of August 31 = June 30 Position + YTD Actual
         position_august = june_val + ytd_act_val
+        
         ytd_pct = (ytd_act_val / ytd_plan_val * 100) if ytd_plan_val > 0 else 0.0
         m_pct = (m_act_val / m_plan_val * 100) if m_plan_val > 0 else 0.0
         
-        combined_rows.append({
+        extracted_rows.append({
             "#": row_counter,
             "Particulars / variables": p_name,
             "As of June 30, 2026": f"{june_val:,.0f}" if june_val > 0 else "0",
@@ -168,8 +172,8 @@ for s_key, df in sheets.items():
         })
         row_counter += 1
 
-if not combined_rows:
-    combined_rows.append({
+if not extracted_rows:
+    extracted_rows.append({
         "#": 1,
         "Particulars / variables": "No data rows found in uploaded files",
         "As of June 30, 2026": "0",
@@ -182,7 +186,7 @@ if not combined_rows:
         "Position As of August 31, 2026": "0"
     })
 
-exec_summary_df = pd.DataFrame(combined_rows)
+exec_summary_df = pd.DataFrame(extracted_rows)
 exec_summary_df.columns = [
     "#", "Particulars / variables", "As of June 30, 2026", 
     "YTD. Plan", "YTD. Actual", "%age", 
@@ -207,9 +211,9 @@ with tab1:
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
-    selected_part = st.selectbox("Select Sheet to Inspect:", list(sheets.keys()))
-    if selected_part in sheets:
-        st.data_editor(sheets[selected_part], num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}")
+    selected_sheet = st.selectbox("Select Sheet to Inspect:", list(sheets.keys()))
+    if selected_sheet in sheets:
+        st.data_editor(sheets[selected_sheet], num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
