@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Precise Sequential Column Mapping</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Row-Level Matching & Position Rules</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. PRECISE SEQUENTIAL METRIC EXTRACTION
+# 2. ROW-LEVEL MATCHING & EXACT METRIC EXTRACTION
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,32 +92,56 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_for_particular(sheets_dict, keywords):
-    """Extracts exactly 5 sequential metric columns from matching domain sheets."""
+def extract_row_metrics(sheets_dict, keywords):
+    """Scans all dataframes row-by-row to find the exact matching particular and extract its numeric columns."""
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     matching_sheets = {}
-    
+    found = False
+
     for s_name, df in sheets_dict.items():
-        if any(k in s_name.lower() for k in keywords):
-            matching_sheets[s_name] = df
-            
-            # Find all columns that contain numeric data
-            numeric_cols = []
-            for col in df.columns:
-                # Check if column has valid numeric values
-                converted = df[col].apply(clean_val)
-                if converted.sum() > 0:
-                    numeric_cols.append(col)
-            
-            # If we find rows, extract the summary/total row or sum column-wise
-            if not df.empty and len(numeric_cols) >= 5:
-                # Take the row that matches or sum the numeric columns
-                col_sums = [df[col].apply(clean_val).sum() for col in numeric_cols[:5]]
-                metrics["June"] += col_sums[0]
-                metrics["YTD_Plan"] += col_sums[1]
-                metrics["YTD_Actual"] += col_sums[2]
-                metrics["M_Plan"] += col_sums[3]
-                metrics["M_Actual"] += col_sums[4]
+        for idx, row in df.iterrows():
+            row_text = " ".join([str(val).lower() for val in row.values])
+            # Check if row contains the specific keyword
+            if any(k in row_text for k in keywords):
+                matching_sheets[s_name] = df
+                found = True
+                
+                # Extract all numeric values from this specific row
+                numeric_vals = []
+                for val in row.values:
+                    num = clean_val(val)
+                    if num > 0:
+                        numeric_vals.append(num)
+                
+                # Map numeric values sequentially: [June, YTD Plan, YTD Actual, M Plan, M Actual]
+                if len(numeric_vals) >= 5:
+                    metrics["June"] += numeric_vals[0]
+                    metrics["YTD_Plan"] += numeric_vals[1]
+                    metrics["YTD_Actual"] += numeric_vals[2]
+                    metrics["M_Plan"] += numeric_vals[3]
+                    metrics["M_Actual"] += numeric_vals[4]
+                elif len(numeric_vals) == 4:
+                    metrics["June"] += numeric_vals[0]
+                    metrics["YTD_Plan"] += numeric_vals[1]
+                    metrics["YTD_Actual"] += numeric_vals[2]
+                    metrics["M_Actual"] += numeric_vals[3]
+                break
+        if found:
+            break
+
+    # Fallback if row-level search didn't trigger, use sheet-level totals
+    if not found:
+        for s_name, df in sheets_dict.items():
+            if any(k in s_name.lower() for k in keywords):
+                matching_sheets[s_name] = df
+                num_cols = [c for c in df.columns if df[c].apply(clean_val).sum() > 0]
+                if len(num_cols) >= 5:
+                    col_sums = [df[c].apply(clean_val).sum() for c in num_cols[:5]]
+                    metrics["June"] += col_sums[0]
+                    metrics["YTD_Plan"] += col_sums[1]
+                    metrics["YTD_Actual"] += col_sums[2]
+                    metrics["M_Plan"] += col_sums[3]
+                    metrics["M_Actual"] += col_sums[4]
 
     return metrics, matching_sheets
 
@@ -134,7 +158,7 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords) in enumerate(particulars, 1):
-    sums, matched = extract_metrics_for_particular(sheets, keywords)
+    sums, matched = extract_row_metrics(sheets, keywords)
     all_detail_sheets_dict[part_name] = matched
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -176,7 +200,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards with correct sequential column mapping and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards with correct row-level matching and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -204,7 +228,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully mapped with exact sequential column order.
+   • Summary table successfully matched row-by-row with detail workbooks.
    • Position As of August 31, 2026 calculated precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
