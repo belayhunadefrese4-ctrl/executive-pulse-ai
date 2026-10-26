@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Dynamic Row-Level Particulars Extraction</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Automated Header Detection</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -49,22 +49,42 @@ uploaded_files = st.sidebar.file_uploader(
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
+# Helper to automatically find the real table start row (bypassing title rows)
+def load_clean_dataframe(file, sheet_name=None):
+    file.seek(0)
+    if file.name.endswith('.csv'):
+        df_raw = pd.read_csv(file, header=None)
+    else:
+        df_raw = pd.read_excel(file, sheet_name=sheet_name, header=None)
+        
+    df_raw = df_raw.dropna(how='all').dropna(axis=1, how='all')
+    
+    # Locate header row: search for rows containing key financial terms
+    header_idx = 0
+    for idx, row in df_raw.iterrows():
+        row_str = " ".join([str(val).lower() for val in row.values if pd.notna(val)])
+        if any(k in row_str for k in ["june", "ytd", "plan", "actual", "particular", "variable", "description"]):
+            header_idx = idx
+            break
+            
+    # Set headers and slice clean data
+    headers = [str(val).strip() for val in df_raw.iloc[header_idx].values]
+    df_clean = df_raw.iloc[header_idx + 1:].copy()
+    df_clean.columns = headers
+    return df_clean.dropna(how='all')
+
 sheets = {}
 if uploaded_files:
     try:
         for file in uploaded_files:
             file_prefix = file.name.rsplit('.', 1)[0]
             if file.name.endswith('.csv'):
-                df_temp = pd.read_csv(file).dropna(how='all').dropna(axis=1, how='all')
-                df_temp.columns = [str(c).strip() for c in df_temp.columns]
-                sheets[file_prefix] = df_temp
+                sheets[file_prefix] = load_clean_dataframe(file)
             else:
                 xls = pd.ExcelFile(file)
                 for s_name in xls.sheet_names:
-                    s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
-                    s_df.columns = [str(c).strip() for c in s_df.columns]
                     sheet_key = f"{file_prefix} -> {s_name}" if len(xls.sheet_names) > 1 else file_prefix
-                    sheets[sheet_key] = s_df
+                    sheets[sheet_key] = load_clean_dataframe(file, sheet_name=s_name)
         st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Active Sheet(s)")
     except Exception as e:
         st.sidebar.error(f"Error loading files: {e}")
@@ -75,7 +95,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. DYNAMIC ROW-LEVEL EXTRACTION ENGINE
+# 2. NUMERIC AGGREGATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,94 +106,81 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-combined_rows = []
-row_counter = 1
-
-for s_key, df in sheets.items():
-    if df is None or df.empty:
-        continue
+def extract_metrics_flexible(target_df):
+    metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
+    if target_df is None or target_df.empty:
+        return metrics
         
-    cols = df.columns
-    col_map = {str(c).lower().strip(): c for c in cols}
-    
-    # Identify Particulars/Description column dynamically
-    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name"])), None)
-    if not part_col and len(cols) > 1:
-        for c in cols:
-            if df[c].dtype == object:
-                part_col = c
-                break
-        if not part_col:
-            part_col = cols[1] if len(cols) > 1 else cols[0]
-
-    # Identify exact metric columns by header name or correct index mapping
-    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
-    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
-    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
-    m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c or "actual" in c)), None)
-    
-    # Positional fallbacks for standard bank detail templates
-    numeric_cols = [c for c in cols if c != part_col and not any(w in str(c).lower() for w in ["branch", "district", "location", "code", "#", "unnamed"])]
-    
-    if not june_col and len(numeric_cols) > 0: june_col = numeric_cols[0]
-    if not ytd_plan_col and len(numeric_cols) > 1: ytd_plan_col = numeric_cols[1]
-    if not ytd_act_col and len(numeric_cols) > 2: ytd_act_col = numeric_cols[2]
-    if not m_plan_col and len(numeric_cols) > 3: m_plan_col = numeric_cols[3]
-    if not m_act_col and len(numeric_cols) > 4: m_act_col = numeric_cols[4]
-
-    # Extract each row as an individual particular/variable
-    for idx, row in df.iterrows():
-        p_name = str(row[part_col]).strip() if part_col in df.columns else f"Item {row_counter}"
-        if not p_name or p_name.lower() in ["nan", "none", "total", "grand total"]:
+    # Find all numeric columns with valid non-zero totals
+    numeric_sums = []
+    for c in target_df.columns:
+        c_low = str(c).lower()
+        if any(w in c_low for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "particulars", "code"]):
             continue
-            
-        june_val = clean_val(row[june_col]) if june_col and june_col in df.columns else 0.0
-        ytd_plan_val = clean_val(row[ytd_plan_col]) if ytd_plan_col and ytd_plan_col in df.columns else 0.0
-        ytd_act_val = clean_val(row[ytd_act_col]) if ytd_act_col and ytd_act_col in df.columns else 0.0
-        m_plan_val = clean_val(row[m_plan_col]) if m_plan_col and m_plan_col in df.columns else 0.0
-        m_act_val = clean_val(row[m_act_col]) if m_act_col and m_act_col in df.columns else 0.0
-        
-        if june_val == 0 and ytd_plan_val == 0 and ytd_act_val == 0:
-            continue
-            
-        # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
-        position_august = june_val + ytd_act_val
-        
-        ytd_pct = (ytd_act_val / ytd_plan_val * 100) if ytd_plan_val > 0 else 0.0
-        m_pct = (m_act_val / m_plan_val * 100) if m_plan_val > 0 else 0.0
-        
-        combined_rows.append({
-            "#": row_counter,
-            "Particulars / variables": p_name,
-            "As of June 30, 2026": f"{june_val:,.0f}" if june_val > 0 else "0",
-            "YTD. Plan": f"{ytd_plan_val:,.0f}" if ytd_plan_val > 0 else "0",
-            "YTD. Actual": f"{ytd_act_val:,.0f}" if ytd_act_val > 0 else "0",
-            "%age": f"{ytd_pct:.0f}%" if ytd_pct > 0 else "0%",
-            "M.Plan": f"{m_plan_val:,.0f}" if m_plan_val > 0 else "0",
-            "M. Actual": f"{m_act_val:,.0f}" if m_act_val > 0 else "0",
-            "%age.1": f"{m_pct:.0f}%" if m_pct > 0 else "0%",
-            "Position As of August 31, 2026": f"{position_august:,.0f}" if position_august > 0 else "0"
-        })
-        row_counter += 1
+        c_sum = target_df[c].apply(clean_val).sum()
+        if c_sum > 0:
+            numeric_sums.append(c_sum)
 
-if not combined_rows:
-    default_parts = ["ATM", "Mobile Bank", "POS Merchant", "QR Merchant", "Customer Base", "Balance Sheet & Deposits"]
-    for i, p in enumerate(default_parts, 1):
-        combined_rows.append({
-            "#": i,
-            "Particulars / variables": p,
-            "As of June 30, 2026": "0",
-            "YTD. Plan": "0",
-            "YTD. Actual": "0",
-            "%age": "0%",
-            "M.Plan": "0",
-            "M. Actual": "0",
-            "%age.1": "0%",
-            "Position As of August 31, 2026": "0"
-        })
+    # Assign from left to right across valid numeric columns
+    if len(numeric_sums) > 0: metrics["June"] = numeric_sums[0]
+    if len(numeric_sums) > 1: metrics["YTD_Plan"] = numeric_sums[1]
+    if len(numeric_sums) > 2: metrics["YTD_Actual"] = numeric_sums[2]
+    if len(numeric_sums) > 3: metrics["M_Plan"] = numeric_sums[3]
+    if len(numeric_sums) > 4: metrics["M_Actual"] = numeric_sums[4]
+            
+    return metrics
 
-exec_summary_df = pd.DataFrame(combined_rows)
+particulars_list = [
+    ("ATM", ["atm"]),
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"]),
+    ("POS Merchant", ["pos"]),
+    ("QR Merchant", ["qr"]),
+    ("Customer Base", ["customer", "cb", "segment"]),
+    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"])
+]
+
+sheet_keys = list(sheets.keys())
+summary_rows = []
+all_detail_sheets_dict = {}
+
+for idx, (part_name, keywords) in enumerate(particulars_list):
+    target_df = None
+    
+    # 1. Match by keyword
+    for s_name, df in sheets.items():
+        if any(k in s_name.lower() for k in keywords):
+            target_df = df
+            break
+            
+    # 2. Fallback to sequential file mapping
+    if target_df is None and idx < len(sheet_keys):
+        target_df = sheets[sheet_keys[idx]]
+    elif target_df is None and len(sheet_keys) > 0:
+        target_df = sheets[sheet_keys[idx % len(sheet_keys)]]
+            
+    sums = extract_metrics_flexible(target_df)
+    all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
+    
+    # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
+    position_august = sums["June"] + sums["YTD_Actual"]
+    
+    ytd_pct = (sums["YTD_Actual"] / sums["YTD_Plan"] * 100) if sums["YTD_Plan"] > 0 else 0.0
+    m_pct = (sums["M_Actual"] / sums["M_Plan"] * 100) if sums["M_Plan"] > 0 else 0.0
+    
+    summary_rows.append({
+        "#": idx + 1,
+        "Particulars / variables": part_name,
+        "As of June 30, 2026": f"{sums['June']:,.0f}" if sums['June'] > 0 else "0",
+        "YTD. Plan": f"{sums['YTD_Plan']:,.0f}" if sums['YTD_Plan'] > 0 else "0",
+        "YTD. Actual": f"{sums['YTD_Actual']:,.0f}" if sums['YTD_Actual'] > 0 else "0",
+        "%age": f"{ytd_pct:.0f}%" if ytd_pct > 0 else "0%",
+        "M.Plan": f"{sums['M_Plan']:,.0f}" if sums['M_Plan'] > 0 else "0",
+        "M. Actual": f"{sums['M_Actual']:,.0f}" if sums['M_Actual'] > 0 else "0",
+        "%age.1": f"{m_pct:.0f}%" if m_pct > 0 else "0%",
+        "Position As of August 31, 2026": f"{position_august:,.0f}" if position_august > 0 else "0"
+    })
+
+exec_summary_df = pd.DataFrame(summary_rows)
 exec_summary_df.columns = [
     "#", "Particulars / variables", "As of June 30, 2026", 
     "YTD. Plan", "YTD. Actual", "%age", 
@@ -193,61 +200,22 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Extracted dynamically from file rows with correct column alignment and Position = June Position + YTD Actual:")
+    st.markdown("Structured with automated header detection and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
-    selected_part = st.selectbox("Select Sheet to Inspect:", list(sheets.keys()))
-    if selected_part in sheets:
-        st.data_editor(sheets[selected_part], num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}")
+    selected_part = st.selectbox("Select Particulars / Variable to Inspect:", [p[0] for p in particulars_list])
+    
+    matched_dict = all_detail_sheets_dict[selected_part]
+    if matched_dict:
+        for s_name, s_df in matched_dict.items():
+            if s_df is not None:
+                st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
+                st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
+            else:
+                st.info("No detail sheet available.")
+    else:
+        st.info("No details available.")
 
 with tab3:
-    st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
-    
-    narrative_text = f"""
-====================================================================================
-COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
-====================================================================================
-
-1. EXECUTIVE SUMMARY MATRIX
-   ---------------------------------------------------------------------------------
-   • Summary table successfully generated with correct row-level particulars and columns.
-   • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
-
-====================================================================================
-CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
-====================================================================================
-"""
-
-    ppt_outline = f"""
-SLIDE 1: INSTITUTIONAL PERFORMANCE MATRIX ({reporting_period})
-- Standardized Particulars Breakdown extracted dynamically from detail workbooks.
-- Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
-"""
-
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        st.markdown("##### 📄 Boardroom Executive Report")
-        st.markdown(f'<div class="report-box"><pre>{narrative_text}</pre></div>', unsafe_allow_html=True)
-    with col_r2:
-        st.markdown("##### 📊 Boardroom PPT Slide Outline")
-        st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
-
-with tab4:
-    st.subheader("📥 Download Master Package")
-    st.markdown("Download the fully structured Excel workbook containing the standardized summary table as the first sheet.")
-
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        exec_summary_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
-        for s_name, s_df in sheets.items():
-            clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
-            s_df.to_excel(writer, sheet_name=clean_name, index=False)
-
-    st.download_button(
-        label="📥 Download Complete Enterprise Multi-Sheet Package (.xlsx)",
-        data=excel_buffer.getvalue(),
-        file_name=f"Enterprise_Bank_Package_{reporting_period}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
