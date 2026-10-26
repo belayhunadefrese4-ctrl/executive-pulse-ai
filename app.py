@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Variable Roll-up & Positional Extraction Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Precise Column Alignment Engine</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -49,7 +49,7 @@ uploaded_files = st.sidebar.file_uploader(
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-# Automated header detection parser
+# Automated header detection parser (bypasses title blocks)
 def load_clean_table(file, sheet_name=None):
     file.seek(0)
     if file.name.endswith('.csv'):
@@ -62,7 +62,7 @@ def load_clean_table(file, sheet_name=None):
     header_idx = 0
     for idx, row in df_raw.iterrows():
         row_str = " ".join([str(val).lower() for val in row.values if pd.notna(val)])
-        if any(k in row_str for k in ["june", "jun", "ytd", "plan", "actual", "particular", "variable", "description", "item", "branch"]):
+        if any(k in row_str for k in ["june", "jun", "ytd", "plan", "actual", "branch", "district", "location"]):
             header_idx = idx
             break
             
@@ -93,7 +93,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. POSITIONAL PARSING & METRIC EXTRACTION
+# 2. PRECISION COLUMN MAPPING & ROLL-UP
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -113,20 +113,25 @@ for idx, (s_key, df) in enumerate(sheets.items()):
     cols = list(df.columns)
     col_map = {str(c).lower().strip(): c for c in cols}
     
-    # Identify Name / Particulars column
-    part_col = next((col_map[c] for c in col_map if any(k in c for k in ["particular", "variable", "item", "description", "product", "service", "name", "type", "branch"])), cols[0])
+    # Identify explicit metric columns by keywords or positional fallback
+    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
+    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
+    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
+    m_plan_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and "plan" in c), None)
+    m_act_col = next((col_map[c] for c in col_map if any(m in c for m in ["m.", "month", "monthly"]) and ("act" in c or "actual" in c)), None)
     
-    # Extract numeric columns strictly in sequence after the particulars column
-    numeric_cols = [c for c in cols if c != part_col and not any(w in str(c).lower() for w in ["code", "#", "unnamed"])]
-    
-    # Assign positional metrics: [June, YTD Plan, YTD Actual, M Plan, M Actual]
-    june_col = numeric_cols[0] if len(numeric_cols) > 0 else None
-    ytd_plan_col = numeric_cols[1] if len(numeric_cols) > 1 else None
-    ytd_act_col = numeric_cols[2] if len(numeric_cols) > 2 else None
-    m_plan_col = numeric_cols[3] if len(numeric_cols) > 3 else None
-    m_act_col = numeric_cols[4] if len(numeric_cols) > 4 else None
+    # Filter out text/metadata columns (Branch Code, Name, District, Location) to isolate true numbers
+    text_headers = ["branch", "code", "name", "district", "location", "particular", "variable", "item", "description"]
+    numeric_cols = [c for c in cols if not any(t in str(c).lower() for t in text_headers) and "unnamed" not in str(c).lower()]
 
-    # Calculate total sums for this specific variable sheet
+    # Positional fallback if keyword lookup fails
+    if not june_col and len(numeric_cols) > 0: june_col = numeric_cols[0]
+    if not ytd_plan_col and len(numeric_cols) > 1: ytd_plan_col = numeric_cols[1]
+    if not ytd_act_col and len(numeric_cols) > 2: ytd_act_col = numeric_cols[2]
+    if not m_plan_col and len(numeric_cols) > 3: m_plan_col = numeric_cols[3]
+    if not m_act_col and len(numeric_cols) > 4: m_act_col = numeric_cols[4]
+
+    # Calculate exact sums for each metric column
     s_june = df[june_col].apply(clean_val).sum() if june_col and june_col in df.columns else 0.0
     s_ytd_plan = df[ytd_plan_col].apply(clean_val).sum() if ytd_plan_col and ytd_plan_col in df.columns else 0.0
     s_ytd_act = df[ytd_act_col].apply(clean_val).sum() if ytd_act_col and ytd_act_col in df.columns else 0.0
@@ -138,16 +143,19 @@ for idx, (s_key, df) in enumerate(sheets.items()):
     ytd_pct = (s_ytd_act / s_ytd_plan * 100) if s_ytd_plan > 0 else 0.0
     m_pct = (s_m_act / s_m_plan * 100) if s_m_plan > 0 else 0.0
 
+    # Clean display name for variable (e.g. remove file prefix if desired)
+    var_name = s_key.split(" -> ")[-1].replace(".xlsx", "").replace(".csv", "")
+
     summary_rows.append({
         "#": idx + 1,
-        "Particulars / variables": s_key,
+        "Particulars / variables": var_name,
         "As of June 30, 2026": f"{s_june:,.0f}",
         "YTD. Plan": f"{s_ytd_plan:,.0f}",
         "YTD. Actual": f"{s_ytd_act:,.0f}",
-        "%age": f"{ytd_pct:.0f}%",
+        "%age": f"{ytd_pct:.1f}%",
         "M.Plan": f"{s_m_plan:,.0f}",
         "M. Actual": f"{s_m_act:,.0f}",
-        "%age.1": f"{m_pct:.0f}%",
+        "%age.1": f"{m_pct:.1f}%",
         "Position As of August 31, 2026": f"{position_august:,.0f}"
     })
 
@@ -170,26 +178,24 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with tab1:
-    st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Master Summary Roll-up (Each variable sheet's total sum — No mixed grand totals):")
+    st.subheader(f"Executive Summary Roll-up ({reporting_period})")
+    st.markdown("Consolidated variable totals aligned accurately into the standard matrix:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
     selected_sheet = st.selectbox("Select Variable Sheet to Inspect Details:", list(sheets.keys()))
     if selected_sheet in sheets:
-        st.markdown(f"**Showing full detail rows and automated total for `{selected_sheet}`:**")
+        st.markdown(f"**Showing full branch breakdown and automated Grand Total for `{selected_sheet}`:**")
         
-        # Display detail df with an added Total row at the bottom
         detail_df = sheets[selected_sheet].copy()
         
-        # Calculate numeric column sums for this detail sheet
-        numeric_cols_detail = [c for c in detail_df.columns if c != detail_df.columns[0]]
-        total_row = {detail_df.columns[0]: "TOTAL"}
+        # Build automated Grand Total row for the detail table
+        total_row = {detail_df.columns[0]: "GRAND TOTAL"}
         for c in detail_df.columns:
             if c != detail_df.columns[0]:
                 col_sum = detail_df[c].apply(clean_val).sum()
-                total_row[c] = f"{col_sum:,.0f}" if col_sum > 0 else "-"
+                total_row[c] = f"{col_sum:,.0f}" if col_sum > 0 else ""
             
         detail_df = pd.concat([detail_df, pd.DataFrame([total_row])], ignore_index=True)
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
