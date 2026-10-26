@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Universal File Ingestion</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Direct File-to-Row Mapping</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. UNIVERSAL EXTRACTION ENGINE
+# 2. ROBUST EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -91,54 +91,30 @@ def extract_metrics(target_df):
     if target_df is None or target_df.empty:
         return metrics
         
-    col_map = {str(c).lower().strip(): c for c in target_df.columns}
-    
-    # Header name lookup
-    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
-    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
-    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c or "actual" in c)), None)
-    m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c or "actual" in c)), None)
-    
-    # Numeric column fallback
+    # Gather all numeric columns that have non-zero sums
     numeric_cols = []
     for c in target_df.columns:
         c_low = str(c).lower()
+        # Skip standard text/metadata columns
         if any(w in c_low for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "particulars", "code"]):
             continue
-        if target_df[c].apply(clean_val).sum() > 0:
+        col_sum = target_df[c].apply(clean_val).sum()
+        if col_sum > 0:
             numeric_cols.append(c)
 
-    if june_col:
-        metrics["June"] = target_df[june_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 0:
-        metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
-
-    if ytd_plan_col:
-        metrics["YTD_Plan"] = target_df[ytd_plan_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 1:
-        metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
-
-    if ytd_act_col:
-        metrics["YTD_Actual"] = target_df[ytd_act_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 2:
-        metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
-
-    if m_plan_col:
-        metrics["M_Plan"] = target_df[m_plan_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 3:
-        metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
-
-    if m_act_col:
-        metrics["M_Actual"] = target_df[m_act_col].apply(clean_val).sum()
-    elif len(numeric_cols) > 4:
-        metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
+    # Assign from left to right across the valid numeric columns
+    if len(numeric_cols) > 0: metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
+    if len(numeric_cols) > 1: metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
+    if len(numeric_cols) > 2: metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
+    if len(numeric_cols) > 3: metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
+    if len(numeric_cols) > 4: metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
             
     return metrics
 
+# Ordered with ATM first to match your uploaded ATM file directly
 particulars_list = [
-    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"]),
     ("ATM", ["atm"]),
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"]),
     ("POS Merchant", ["pos"]),
     ("QR Merchant", ["qr"]),
     ("Customer Base", ["customer", "cb", "segment"]),
@@ -152,13 +128,13 @@ all_detail_sheets_dict = {}
 for idx, (part_name, keywords) in enumerate(particulars_list):
     target_df = None
     
-    # 1. Try keyword match
+    # 1. Try keyword match in sheet/file name
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Universal sequential fallback: assign uploaded files in order
+    # 2. Sequential fallback if keyword not found
     if target_df is None and idx < len(sheet_keys):
         target_df = sheets[sheet_keys[idx]]
     elif target_df is None and len(sheet_keys) > 0:
@@ -206,7 +182,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with universal file ingestion and Position = June Position + YTD Actual:")
+    st.markdown("Structured with direct mapping and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -234,7 +210,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with universal file ingestion.
+   • Summary table successfully generated with direct file mapping.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -244,7 +220,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
 
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE MATRIX ({reporting_period})
-- Standardized Particulars Breakdown (Mobile Bank, ATM, POS, QR, Customer Base, Balance Sheet).
+- Standardized Particulars Breakdown (ATM, Mobile Bank, POS, QR, Customer Base, Balance Sheet).
 - Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
 """
 
