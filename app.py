@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Direct Total Row Extraction</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Grand Total Row Extraction</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. DIRECT TOTAL ROW & COLUMN EXTRACTION ENGINE
+# 2. EXACT GRAND TOTAL ROW EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,36 +92,31 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_from_file(sheets_dict, keywords, fallback_idx):
+def extract_grand_total_from_file(sheets_dict, keywords, file_index):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     target_df = None
     
-    # 1. Keyword match
+    # 1. Match by keyword in sheet name
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Sequential fallback
+    # 2. Match sequentially by uploaded file index if keyword not found
     if target_df is None and len(sheets_dict) > 0:
         sheet_keys = list(sheets_dict.keys())
-        target_df = sheets_dict[sheet_keys[fallback_idx % len(sheet_keys)]]
+        if file_index < len(sheet_keys):
+            target_df = sheets_dict[sheet_keys[file_index]]
 
     if target_df is not None:
-        # Look for the last row or a row containing "total"/"sum" which holds the summary totals
-        summary_row = target_df.iloc[-1] # Default to last row
-        for idx, row in target_df.iterrows():
-            row_str = " ".join([str(v).lower() for v in row.values])
-            if "total" in row_str or "sum" in row_str:
-                summary_row = row
-                break
-
-        # Extract numeric values from the summary row, filtering out small numbers/percentages
+        # Grab the absolute last row (Grand Total row in institutional bank templates)
+        last_row = target_df.iloc[-1]
+        
+        # Extract numeric values from the last row, ignoring small numbers/percentages
         numeric_vals = []
-        for val in summary_row.values:
+        for val in last_row.values:
             num = clean_val(val)
-            # Exclude small numbers (like percentages or sequence numbers)
-            if num > 10.0:
+            if num > 1.0:  # Ensures we pick up actual volume totals rather than percentages or indexes
                 numeric_vals.append(num)
 
         if len(numeric_vals) >= 5:
@@ -130,22 +125,6 @@ def extract_metrics_from_file(sheets_dict, keywords, fallback_idx):
             metrics["YTD_Actual"] = numeric_vals[2]
             metrics["M_Plan"] = numeric_vals[3]
             metrics["M_Actual"] = numeric_vals[4]
-        else:
-            # Fallback column-wise sum of the detail sheet
-            col_sums = []
-            for col in target_df.columns:
-                col_lower = str(col).lower()
-                if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region"]):
-                    continue
-                c_sum = target_df[col].apply(clean_val).sum()
-                if c_sum > 10.0:
-                    col_sums.append(c_sum)
-            if len(col_sums) >= 5:
-                metrics["June"] = col_sums[0]
-                metrics["YTD_Plan"] = col_sums[1]
-                metrics["YTD_Actual"] = col_sums[2]
-                metrics["M_Plan"] = col_sums[3]
-                metrics["M_Actual"] = col_sums[4]
 
     return metrics, target_df
 
@@ -161,11 +140,17 @@ particulars = [
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, (part_name, keywords, fallback_idx) in enumerate(particulars):
-    sums, matched_df = extract_metrics_from_file(sheets, keywords, fallback_idx)
+for idx, (part_name, keywords, file_idx) in enumerate(particulars):
+    # Only extract if we have a corresponding uploaded file/sheet for this index, otherwise default to 0
+    if file_idx < len(sheets):
+        sums, matched_df = extract_grand_total_from_file(sheets, keywords, file_idx)
+    else:
+        sums = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
+        matched_df = None
+
     all_detail_sheets_dict[part_name] = {part_name: matched_df} if matched_df is not None else {}
     
-    # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
+    # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = sums["June"] + sums["YTD_Actual"]
     
     ytd_pct = (sums["YTD_Actual"] / sums["YTD_Plan"] * 100) if sums["YTD_Plan"] > 0 else 0.0
@@ -204,7 +189,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards with correct total row extraction and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards, pulling grand totals from the final row and enforcing Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -218,7 +203,7 @@ with tab2:
                 st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
-                st.info("No detail sheet mapped for this particular.")
+                st.info("No detail sheet uploaded for this particular yet.")
     else:
         st.info("No details available.")
 
@@ -232,7 +217,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully populated via direct total row extraction.
+   • Summary table successfully linked to grand total rows of ingested workbooks.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
