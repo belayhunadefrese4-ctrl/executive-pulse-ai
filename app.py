@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Robust Column Summation & Position Rules</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Strict Particular-to-File Mapping</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. ROBUST COLUMN SUMMATION ENGINE
+# 2. PRECISE PARTICULAR MAPPING ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,41 +92,41 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_robust(sheets_dict, index, keywords):
+def extract_particular_metrics(sheets_dict, keywords, fallback_index):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     target_df = None
     
-    # 1. Keyword match
+    # Search for sheet matching keywords
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Sequential fallback if keyword not found
+    # If no exact keyword match, map sequentially by file index if available
     if target_df is None and len(sheets_dict) > 0:
         sheet_keys = list(sheets_dict.keys())
-        target_df = sheets_dict[sheet_keys[index % len(sheet_keys)]]
+        if fallback_index < len(sheet_keys):
+            target_df = sheets_dict[sheet_keys[fallback_index]]
 
     if target_df is not None:
-        # Isolate numeric columns
+        # Isolate numeric columns (ignoring text/metadata columns like Branch, District, City)
         numeric_cols = []
         for col in target_df.columns:
             col_lower = str(col).lower()
-            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region"]):
+            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region", "south", "north"]):
                 continue
             converted = target_df[col].apply(clean_val)
             if converted.sum() > 0:
                 numeric_cols.append(col)
 
-        # If we have at least 5 numeric columns (June, YTD Plan, YTD Actual, M Plan, M Actual)
+        # Sum the values across all data rows for each metric column
         if len(numeric_cols) >= 5:
             metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
             metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
             metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
             metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
             metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
-        else:
-            # Fallback to positional numeric columns
+        elif len(numeric_cols) > 0:
             all_num = [c for c in target_df.columns if target_df[c].apply(clean_val).sum() > 0]
             if len(all_num) >= 5:
                 metrics["June"] = target_df[all_num[0]].apply(clean_val).sum()
@@ -138,20 +138,20 @@ def extract_metrics_robust(sheets_dict, index, keywords):
     return metrics, target_df
 
 particulars = [
-    ("ATM", ["atm"]),
-    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"]),
-    ("POS Merchant", ["pos"]),
-    ("QR Merchant", ["qr"]),
-    ("Customer Base", ["customer", "cb", "segment"]),
-    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"])
+    ("ATM", ["atm"], 0),
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"], 1),
+    ("POS Merchant", ["pos"], 2),
+    ("QR Merchant", ["qr"], 3),
+    ("Customer Base", ["customer", "cb", "segment"], 4),
+    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"], 5)
 ]
 
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, (part_name, keywords) in enumerate(particulars):
-    sums, matched_df = extract_metrics_robust(sheets, idx, keywords)
-    all_detail_sheets_dict[part_name] = {str(idx): matched_df} if matched_df is not None else {}
+for idx, (part_name, keywords, fallback_idx) in enumerate(particulars):
+    sums, matched_df = extract_particular_metrics(sheets, keywords, fallback_idx)
+    all_detail_sheets_dict[part_name] = {part_name: matched_df} if matched_df is not None else {}
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = sums["June"] + sums["YTD_Actual"]
@@ -192,7 +192,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards with automated column summation and Position = June Position + YTD Actual:")
+    st.markdown("Structured exactly to bank standards with correct independent file mapping and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -203,7 +203,7 @@ with tab2:
     if matched_dict:
         for s_name, s_df in matched_dict.items():
             if s_df is not None:
-                st.markdown(f"**Source Workbook / Sheet:** ({len(s_df)} rows total)")
+                st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
                 st.info("No detail sheet mapped for this particular.")
@@ -220,7 +220,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully populated with direct column mapping and automated summation.
+   • Summary table successfully populated with independent particular mapping.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
