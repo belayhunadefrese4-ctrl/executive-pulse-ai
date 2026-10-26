@@ -34,7 +34,7 @@ st.sidebar.markdown("### 🔐 Security & Access Control")
 user_key = st.sidebar.text_input("Enter Master Executive Key", type="password")
 
 if user_key != MASTER_SECURITY_KEY:
-    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Cloud Financial Engine</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Cloud Financial Intelligence Engine</p>', unsafe_allow_html=True)
     st.warning("🔒 Access Restricted: Please enter the valid Master Executive Key in the sidebar.")
     st.stop()
 
@@ -61,12 +61,15 @@ if uploaded_files:
             if file.name.endswith('.csv'):
                 df_temp = pd.read_csv(file).dropna(how='all').dropna(axis=1, how='all')
                 df_temp.columns = [str(c).strip() for c in df_temp.columns]
+                # Ensure unique column names to prevent InvalidIndexError
+                df_temp = df_temp.loc[:, ~df_temp.columns.duplicated()]
                 sheets[file_prefix] = df_temp
             else:
                 xls = pd.ExcelFile(file)
                 for s_name in xls.sheet_names:
                     s_df = pd.read_excel(xls, sheet_name=s_name).dropna(how='all').dropna(axis=1, how='all')
                     s_df.columns = [str(c).strip() for c in s_df.columns]
+                    s_df = s_df.loc[:, ~s_df.columns.duplicated()]
                     sheet_key = f"{file_prefix} - {s_name}" if len(xls.sheet_names) > 1 else file_prefix
                     sheets[sheet_key] = s_df
         st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Domain Sheet(s)")
@@ -79,17 +82,16 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. AUTOMATED DATA PARSING & CALCULATIONS
+# 2. SAFE DATA PARSING & CALCULATIONS
 # ==========================================
-combined_master = pd.concat(sheets.values(), ignore_index=True, sort=False) if sheets else pd.DataFrame()
+# Safely combine dataframes by aligning columns or extracting totals independently
+total_portfolio_volume = 0.0
+total_records = 0
 
-def extract_numeric_totals(df):
-    total_val = 0.0
+for s_name, df in sheets.items():
+    total_records += len(df)
     for col in df.select_dtypes(include=[np.number]).columns:
-        total_val += df[col].sum()
-    return total_val
-
-total_portfolio_volume = extract_numeric_totals(combined_master)
+        total_portfolio_volume += df[col].sum()
 
 # ==========================================
 # 3. EXECUTIVE DASHBOARD TABS
@@ -103,13 +105,13 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("1. Automated High-Level Financial Summary")
-    st.markdown("Calculated dynamically from your online uploaded detail sheets (Balance Sheet, Deposits, Segments, Channels).")
+    st.markdown("Calculated dynamically from your online uploaded detail sheets.")
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown(f'<div class="metric-card"><h4>Total Domains</h4><h2>{len(sheets)}</h2></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown(f'<div class="metric-card"><h4>Total Records</h4><h2>{len(combined_master):,}</h2></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card"><h4>Total Records</h4><h2>{total_records:,}</h2></div>', unsafe_allow_html=True)
     with col3:
         st.markdown(f'<div class="metric-card"><h4>Aggregated Volume</h4><h2>{total_portfolio_volume:,.0f}</h2></div>', unsafe_allow_html=True)
     with col4:
@@ -149,7 +151,7 @@ with tab2:
 with tab3:
     st.subheader("3. Executive Narrative Report & Boardroom PPT Outline")
     
-    sheet_names_list = ", ".join(list(sheets.keys()))
+    sheet_names_sample = ", ".join(list(sheets.keys())[:5]) + ("..." if len(sheets) > 5 else "")
 
     narrative_text = f"""
 ====================================================================================
@@ -158,14 +160,14 @@ EXECUTIVE FINANCIAL & OPERATIONAL REPORT | PERIOD: {reporting_period}
 
 1. BALANCE SHEET & DEPOSIT PERFORMANCE SUMMARY
    ---------------------------------------------------------------------------------
-   • Total Ingested Domain Sheets: {len(sheets)} ({sheet_names_list})
-   • Consolidated Master Records: {len(combined_master):,} total data points processed.
+   • Total Ingested Domain Sheets: {len(sheets)} ({sheet_names_sample})
+   • Consolidated Master Records: {total_records:,} total data points processed.
    • Total Aggregated Portfolio Volume: {total_portfolio_volume:,.2f} calculated dynamically.
 
 2. CUSTOMER BASE & SEGMENT DISTRIBUTION
    ---------------------------------------------------------------------------------
    • Online multi-file ingestion successfully aggregates balance sheets, deposit breakdowns, 
-     customer segments, and digital channels (ATM & Mobile banking) into a cohesive view.
+     customer segments, and digital channels into a cohesive view.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI ENGINE
@@ -175,7 +177,7 @@ CERTIFIED BY EXECUTIVE PULSE AI ENGINE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
 - Reporting Period: {reporting_period}
-- Total Processed Records: {len(combined_master):,} Rows across {len(sheets)} Domains
+- Total Processed Records: {total_records:,} Rows across {len(sheets)} Domains
 
 SLIDE 2: BALANCE SHEET & DEPOSIT STRUCTURE
 - Consolidated Volume: {total_portfolio_volume:,.0f}
@@ -202,7 +204,7 @@ with tab4:
         summary_export_df = pd.DataFrame([
             {"Metric": "Reporting Period", "Value": reporting_period},
             {"Metric": "Total Ingested Domains", "Value": len(sheets)},
-            {"Metric": "Total Consolidated Records", "Value": len(combined_master)},
+            {"Metric": "Total Consolidated Records", "Value": total_records},
             {"Metric": "Aggregated Portfolio Volume", "Value": total_portfolio_volume}
         ])
         summary_export_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
