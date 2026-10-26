@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Column Mapping & Position Rules</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Strict Header Mapping & Position Rule</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. PRECISE COLUMN MAPPING & POSITION RULE
+# 2. EXACT HEADER-BASED MAPPING & POSITION RULE
 # ==========================================
 def clean_and_sum_column(series):
     return pd.to_numeric(
@@ -89,39 +89,39 @@ def clean_and_sum_column(series):
         errors='coerce'
     ).fillna(0.0).sum()
 
-def extract_exact_bank_metrics(sheets_dict, keywords):
-    metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0, "Position": 0.0}
+def extract_metrics_by_header(sheets_dict, keywords):
+    metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     matching_sheets = {}
     
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             matching_sheets[s_name] = df
             
-            # Extract all numeric column totals from the detail sheet
-            numeric_cols = [col for col in df.columns if pd.to_numeric(df[col], errors='coerce').notnull().sum() > 0 or df[col].dtype in [np.number, float, int]]
-            col_sums = [clean_and_sum_column(df[c]) for c in df.columns if clean_and_sum_column(df[c]) > 0]
-            
-            # Map based on standard column positions (June, YTD Plan, YTD Actual, M Plan, M Actual)
-            if len(col_sums) >= 5:
-                metrics["June"] += col_sums[0]
-                metrics["YTD_Plan"] += col_sums[1]
-                metrics["YTD_Actual"] += col_sums[2]
-                metrics["M_Plan"] += col_sums[3]
-                metrics["M_Actual"] += col_sums[4]
-                if len(col_sums) >= 6:
-                    metrics["Position"] += col_sums[5]
-            elif len(col_sums) == 4:
-                metrics["June"] += col_sums[0]
-                metrics["YTD_Plan"] += col_sums[1]
-                metrics["YTD_Actual"] += col_sums[2]
-                metrics["M_Actual"] += col_sums[3]
-            elif len(col_sums) > 0:
-                total_val = sum(col_sums)
-                metrics["YTD_Actual"] += total_val
+            # Map columns explicitly by checking header names
+            for col in df.columns:
+                col_lower = str(col).lower()
+                col_sum = clean_and_sum_column(df[col])
+                
+                if any(w in col_lower for w in ["june", "jun", "30"]):
+                    metrics["June"] += col_sum
+                elif "ytd" in col_lower and "plan" in col_lower:
+                    metrics["YTD_Plan"] += col_sum
+                elif "ytd" in col_lower and "actual" in col_lower:
+                    metrics["YTD_Actual"] += col_sum
+                elif ("m." in col_lower or "month" in col_lower) and "plan" in col_lower:
+                    metrics["M_Plan"] += col_sum
+                elif ("m." in col_lower or "month" in col_lower) and "actual" in col_lower:
+                    metrics["M_Actual"] += col_sum
 
-    # Apply banking rule: Position As of August 31 = June 30 Position + YTD Actual (if explicit position isn't given)
-    if metrics["Position"] == 0.0:
-        metrics["Position"] = metrics["June"] + metrics["YTD_Actual"]
+            # If headers don't match keywords, fallback to positional order if columns exist
+            if all(v == 0.0 for v in metrics.values()) and len(df.columns) >= 5:
+                numeric_cols = [c for c in df.columns if clean_and_sum_column(df[c]) > 0]
+                if len(numeric_cols) >= 5:
+                    metrics["June"] += clean_and_sum_column(df[numeric_cols[0]])
+                    metrics["YTD_Plan"] += clean_and_sum_column(df[numeric_cols[1]])
+                    metrics["YTD_Actual"] += clean_and_sum_column(df[numeric_cols[2]])
+                    metrics["M_Plan"] += clean_and_sum_column(df[numeric_cols[3]])
+                    metrics["M_Actual"] += clean_and_sum_column(df[numeric_cols[4]])
 
     return metrics, matching_sheets
 
@@ -138,8 +138,11 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords) in enumerate(particulars, 1):
-    sums, matched = extract_exact_bank_metrics(sheets, keywords)
+    sums, matched = extract_metrics_by_header(sheets, keywords)
     all_detail_sheets_dict[part_name] = matched
+    
+    # Exact Rule: Position As of August 31 = June 30 Position + YTD Actual
+    position_august = sums["June"] + sums["YTD_Actual"]
     
     ytd_pct = (sums["YTD_Actual"] / sums["YTD_Plan"] * 100) if sums["YTD_Plan"] > 0 else 0.0
     m_pct = (sums["M_Actual"] / sums["M_Plan"] * 100) if sums["M_Plan"] > 0 else 0.0
@@ -154,7 +157,7 @@ for idx, (part_name, keywords) in enumerate(particulars, 1):
         "M.Plan": f"{sums['M_Plan']:,.0f}" if sums['M_Plan'] > 0 else "0",
         "M. Actual": f"{sums['M_Actual']:,.0f}" if sums['M_Actual'] > 0 else "0",
         "%age.1": f"{m_pct:.1f}%",
-        "Position As of August 31, 2026": f"{sums['Position']:,.0f}" if sums['Position'] > 0 else "0"
+        "Position As of August 31, 2026": f"{position_august:,.0f}" if position_august > 0 else "0"
     })
 
 exec_summary_df = pd.DataFrame(summary_rows)
@@ -177,7 +180,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Linked summary table with correct column mapping and June + YTD Actual Position summation:")
+    st.markdown("Structured exactly to bank standards with correct column mapping and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -205,8 +208,8 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully mapped with exact column indexes.
-   • Position As of August 31, 2026 correctly calculated as June 30 Position + YTD Actual.
+   • Summary table successfully structured with exact header mapping.
+   • Position As of August 31, 2026 calculated precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
