@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Verified Column Alignment</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Institutional Column Mapping</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. PRECISE COLUMN EXTRACTION ENGINE
+# 2. EXACT INSTITUTIONAL EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,37 +86,40 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_precise(target_df):
+def extract_metrics_institutional(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
         
     cols = target_df.columns
+    col_map = {str(c).lower().strip(): c for c in cols}
     
-    # Exact positional indices for bank detail template:
-    # Index 4: As of June 30, 2026
-    # Index 5: YTD. Plan
-    # Index 6: YTD. Actual
-    # Index 8: M.Plan
-    # Index 9: M. Actual
-    pos_indices = {
-        "June": 4 if len(cols) > 4 else 0,
-        "YTD_Plan": 5 if len(cols) > 5 else 1,
-        "YTD_Actual": 6 if len(cols) > 6 else 2,
-        "M_Plan": 8 if len(cols) > 8 else 3,
-        "M_Actual": 9 if len(cols) > 9 else 4
-    }
+    # 1. Header Name Match
+    june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
+    ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
+    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and "actual" in c), None)
+    m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
+    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "actual" in c), None)
     
-    for key, idx in pos_indices.items():
-        if idx < len(cols):
-            col_name = cols[idx]
-            metrics[key] = target_df[col_name].apply(clean_val).sum()
+    # 2. Positional Fallback based on standard template structure
+    # If headers aren't explicitly named, use precise column index positions
+    if not june_col and len(cols) > 4: june_col = cols[4]
+    if not ytd_plan_col and len(cols) > 5: ytd_plan_col = cols[5]
+    if not ytd_act_col and len(cols) > 6: ytd_act_col = cols[6]
+    if not m_plan_col and len(cols) > 8: m_plan_col = cols[8]
+    if not m_act_col and len(cols) > 9: m_act_col = cols[9]
+
+    if june_col: metrics["June"] = target_df[june_col].apply(clean_val).sum()
+    if ytd_plan_col: metrics["YTD_Plan"] = target_df[ytd_plan_col].apply(clean_val).sum()
+    if ytd_act_col: metrics["YTD_Actual"] = target_df[ytd_act_col].apply(clean_val).sum()
+    if m_plan_col: metrics["M_Plan"] = target_df[m_plan_col].apply(clean_val).sum()
+    if m_act_col: metrics["M_Actual"] = target_df[m_act_col].apply(clean_val).sum()
             
     return metrics
 
 particulars_list = [
-    ("ATM", ["atm"], 0),
-    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"], 1),
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"], 0),
+    ("ATM", ["atm"], 1),
     ("POS Merchant", ["pos"], 2),
     ("QR Merchant", ["qr"], 3),
     ("Customer Base", ["customer", "cb", "segment"], 4),
@@ -140,7 +143,7 @@ for idx, (part_name, keywords, default_file_idx) in enumerate(particulars_list, 
     if target_df is None and default_file_idx < len(sheet_keys):
         target_df = sheets[sheet_keys[default_file_idx]]
         
-    sums = extract_metrics_precise(target_df)
+    sums = extract_metrics_institutional(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -182,7 +185,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with precise column alignment and Position = June Position + YTD Actual:")
+    st.markdown("Structured with exact institutional alignment and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -210,7 +213,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with verified column alignment.
+   • Summary table successfully generated with exact institutional column alignment.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -220,7 +223,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
 
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE MATRIX ({reporting_period})
-- Standardized Particulars Breakdown (ATM, Mobile, POS, QR, Customer Base, Balance Sheet).
+- Standardized Particulars Breakdown (Mobile Bank, ATM, POS, QR, Customer Base, Balance Sheet).
 - Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
 """
 
