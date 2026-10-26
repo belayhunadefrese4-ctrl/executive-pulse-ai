@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Robust Index-Safe Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Unique Column Sanitization Engine</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -48,6 +48,20 @@ uploaded_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
+
+# Helper to ensure unique column names (prevents Arrow/Streamlit duplicate column crashes)
+def make_unique_cols(cols):
+    seen = {}
+    new_cols = []
+    for c in cols:
+        c_str = str(c).strip()
+        if c_str in seen:
+            seen[c_str] += 1
+            new_cols.append(f"{c_str}_{seen[c_str]}")
+        else:
+            seen[c_str] = 0
+            new_cols.append(c_str)
+    return new_cols
 
 # Automated header detection parser
 def load_clean_table(file, sheet_name=None):
@@ -68,7 +82,7 @@ def load_clean_table(file, sheet_name=None):
             
     headers = [str(val).strip() for val in df_raw.iloc[header_idx].values]
     df_clean = df_raw.iloc[header_idx + 1:].copy()
-    df_clean.columns = headers
+    df_clean.columns = make_unique_cols(headers)
     return df_clean.dropna(how='all')
 
 sheets = {}
@@ -184,7 +198,7 @@ with tab2:
         
         detail_df = sheets[selected_sheet].copy()
         
-        # Build safe positional total row for detail view (avoids duplicate index errors)
+        # Build safe positional total row for detail view
         total_list = []
         for i, c in enumerate(detail_df.columns):
             if i == 0:
@@ -206,7 +220,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with flexible keyword column matching.
+   • Master summary compiled successfully with unique column sanitization.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
