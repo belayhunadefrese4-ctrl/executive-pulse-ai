@@ -86,7 +86,7 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_universal(target_df):
+def extract_metrics(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
@@ -162,7 +162,6 @@ for idx, (part_name, keywords) in enumerate(particulars_list):
     if target_df is None and idx < len(sheet_keys):
         target_df = sheets[sheet_keys[idx]]
     elif target_df is None and len(sheet_keys) > 0:
-        # Wrap around if more particulars than files
         target_df = sheets[sheet_keys[idx % len(sheet_keys)]]
             
     sums = extract_metrics(target_df)
