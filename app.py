@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Flexible Keyword Matching Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Robust Index-Safe Engine</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -118,14 +118,12 @@ for idx, (s_key, df) in enumerate(sheets.items()):
     if df is None or df.empty:
         continue
         
-    # Flexible keyword matching covering variations like 'June', 'Jun', 'As of June'
     s_june = clean_sum_by_keywords(df, ["june", "jun"])
     s_ytd_plan = clean_sum_by_keywords(df, ["ytd. plan", "ytd plan", "plan"])
     s_ytd_act = clean_sum_by_keywords(df, ["ytd. actual", "ytd actual", "ytd.act", "actual"])
     s_m_plan = clean_sum_by_keywords(df, ["m.plan", "month plan", "m plan", "monthly plan"])
     s_m_act = clean_sum_by_keywords(df, ["m. actual", "m actual", "month actual", "monthly actual"])
 
-    # If specific keyword lookup returns 0, fallback to positional numeric columns after text metadata
     if s_june == 0.0 and s_ytd_plan == 0.0:
         text_headers = ["branch", "code", "name", "district", "location", "particular", "variable", "item", "description"]
         num_cols = [c for c in df.columns if not any(t in str(c).lower() for t in text_headers) and "unnamed" not in str(c).lower()]
@@ -186,16 +184,16 @@ with tab2:
         
         detail_df = sheets[selected_sheet].copy()
         
-        # Build safe summary totals for detail view
-        total_vals = {}
-        for c in detail_df.columns:
-            col_sum = clean_sum_by_keywords(detail_df, [str(c).lower()])
-            total_vals[c] = f"{col_sum:,.0f}" if col_sum > 0 else ""
+        # Build safe positional total row for detail view (avoids duplicate index errors)
+        total_list = []
+        for i, c in enumerate(detail_df.columns):
+            if i == 0:
+                total_list.append("GRAND TOTAL")
+            else:
+                col_sum = clean_sum_by_keywords(detail_df, [str(c).lower()])
+                total_list.append(f"{col_sum:,.0f}" if col_sum > 0 else "")
                 
-        if len(detail_df.columns) > 0:
-            total_vals[detail_df.columns[0]] = "GRAND TOTAL"
-            
-        detail_df = pd.concat([detail_df, pd.DataFrame([total_vals])], ignore_index=True)
+        detail_df.loc[len(detail_df)] = total_list
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
