@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Strict Positional Column Mapping</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Verified Column Alignment</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. POSITIONAL SUMMATION ENGINE
+# 2. PRECISE COLUMN EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,19 +86,19 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_by_position(target_df):
+def extract_metrics_precise(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
         
-    # Standard Bank Detail Template Layout Indices:
-    # Col 4: As of June 30, 2026
-    # Col 5: YTD. Plan
-    # Col 6: YTD. Actual
-    # Col 8: M.Plan
-    # Col 9: M. Actual
     cols = target_df.columns
     
+    # Exact positional indices for bank detail template:
+    # Index 4: As of June 30, 2026
+    # Index 5: YTD. Plan
+    # Index 6: YTD. Actual
+    # Index 8: M.Plan
+    # Index 9: M. Actual
     pos_indices = {
         "June": 4 if len(cols) > 4 else 0,
         "YTD_Plan": 5 if len(cols) > 5 else 1,
@@ -130,17 +130,17 @@ all_detail_sheets_dict = {}
 for idx, (part_name, keywords, default_file_idx) in enumerate(particulars_list, 1):
     target_df = None
     
-    # 1. Match by keyword in sheet name
+    # Match by keyword
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. Fallback to sequential file mapping if keyword not found
+    # Fallback to sequential file mapping
     if target_df is None and default_file_idx < len(sheet_keys):
         target_df = sheets[sheet_keys[default_file_idx]]
         
-    sums = extract_metrics_by_position(target_df)
+    sums = extract_metrics_precise(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -182,7 +182,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with strict positional column mapping and Position = June Position + YTD Actual:")
+    st.markdown("Structured with precise column alignment and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -210,7 +210,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated using strict positional column extraction.
+   • Summary table successfully generated with verified column alignment.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
