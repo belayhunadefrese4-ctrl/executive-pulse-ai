@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Institutional Column Mapping</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Strict File-to-Particular Matching</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -75,7 +75,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. EXACT INSTITUTIONAL EXTRACTION ENGINE
+# 2. EXACT HEADER EXTRACTION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -86,7 +86,7 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_institutional(target_df):
+def extract_metrics_by_header(target_df):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     if target_df is None or target_df.empty:
         return metrics
@@ -94,15 +94,14 @@ def extract_metrics_institutional(target_df):
     cols = target_df.columns
     col_map = {str(c).lower().strip(): c for c in cols}
     
-    # 1. Header Name Match
+    # Header keyword matching
     june_col = next((col_map[c] for c in col_map if "june" in c or "jun" in c), None)
     ytd_plan_col = next((col_map[c] for c in col_map if "ytd" in c and "plan" in c), None)
-    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and "actual" in c), None)
+    ytd_act_col = next((col_map[c] for c in col_map if "ytd" in c and ("act" in c)), None)
     m_plan_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "plan" in c), None)
-    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and "actual" in c), None)
+    m_act_col = next((col_map[c] for c in col_map if ("m." in c or "month" in c) and ("act" in c)), None)
     
-    # 2. Positional Fallback based on standard template structure
-    # If headers aren't explicitly named, use precise column index positions
+    # Positional fallback if headers are unnamed
     if not june_col and len(cols) > 4: june_col = cols[4]
     if not ytd_plan_col and len(cols) > 5: ytd_plan_col = cols[5]
     if not ytd_act_col and len(cols) > 6: ytd_act_col = cols[6]
@@ -118,32 +117,27 @@ def extract_metrics_institutional(target_df):
     return metrics
 
 particulars_list = [
-    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"], 0),
-    ("ATM", ["atm"], 1),
-    ("POS Merchant", ["pos"], 2),
-    ("QR Merchant", ["qr"], 3),
-    ("Customer Base", ["customer", "cb", "segment"], 4),
-    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"], 5)
+    ("Mobile Bank", ["mobil", "bank", "ussd", "ibmb", "e-birr"]),
+    ("ATM", ["atm"]),
+    ("POS Merchant", ["pos"]),
+    ("QR Merchant", ["qr"]),
+    ("Customer Base", ["customer", "cb", "segment"]),
+    ("Balance Sheet & Deposits", ["balance", "sheet", "deposit", "portfolio", "liability", "asset"])
 ]
 
-sheet_keys = list(sheets.keys())
 summary_rows = []
 all_detail_sheets_dict = {}
 
-for idx, (part_name, keywords, default_file_idx) in enumerate(particulars_list, 1):
+for idx, (part_name, keywords) in enumerate(particulars_list, 1):
     target_df = None
     
-    # Match by keyword
+    # Strict matching: Only assign if sheet/file name matches the particular's keywords
     for s_name, df in sheets.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # Fallback to sequential file mapping
-    if target_df is None and default_file_idx < len(sheet_keys):
-        target_df = sheets[sheet_keys[default_file_idx]]
-        
-    sums = extract_metrics_institutional(target_df)
+    sums = extract_metrics_by_header(target_df)
     all_detail_sheets_dict[part_name] = {part_name: target_df} if target_df is not None else {}
     
     # Mandatory Banking Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -185,7 +179,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader(f"2. Card & Digital Banking Users Summary ({reporting_period})")
-    st.markdown("Structured with exact institutional alignment and Position = June Position + YTD Actual:")
+    st.markdown("Structured with strict file matching and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -199,7 +193,7 @@ with tab2:
                 st.markdown(f"**Source Workbook / Sheet for `{selected_part}`:** ({len(s_df)} rows total)")
                 st.data_editor(s_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_part}_{s_name}")
             else:
-                st.info("No detail sheet mapped for this particular.")
+                st.info("No matching detail sheet uploaded for this particular yet.")
     else:
         st.info("No details available.")
 
@@ -213,7 +207,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully generated with exact institutional column alignment.
+   • Summary table successfully generated with strict file-to-particular matching.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
