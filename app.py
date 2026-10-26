@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Summary Row Extraction</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Exact Column-Wise Detail Summation</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,55 +81,55 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. EXTRACTING SUMMARY ROW TOTALS DIRECTLY
+# 2. COLUMN-WISE SUMMATION OF DETAIL TABLES
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
         return 0.0
-    val_str = str(val).replace(',', '').replace(' ', '').strip()
+    val_str = str(val).replace(',', '').replace('%', '').replace(' ', '').strip()
     try:
         return float(val_str)
     except ValueError:
         return 0.0
 
-def extract_summary_row_metrics(sheets_dict, keywords):
-    """Scans for the summary/total row at the bottom of the detail table, or calculates column sums."""
+def calculate_detail_column_sums(sheets_dict, keywords):
+    """Sums all numeric data rows column-by-column across matching detail sheets, ignoring text columns."""
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     matching_sheets = {}
-    found_summary = False
 
     for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             matching_sheets[s_name] = df
             
-            # Search from the bottom up for a summary/total row or the last row
-            for idx in reversed(df.index):
-                row = df.loc[idx]
-                row_text = " ".join([str(val).lower() for val in row.values])
-                
-                # If row is a total/summary row or the last row of the dataset
-                if "total" in row_text or "sum" in row_text or idx == df.index[-1]:
-                    numeric_vals = [clean_val(val) for val in row.values if clean_val(val) > 0]
-                    
-                    if len(numeric_vals) >= 5:
-                        metrics["June"] += numeric_vals[0]
-                        metrics["YTD_Plan"] += numeric_vals[1]
-                        metrics["YTD_Actual"] += numeric_vals[2]
-                        metrics["M_Plan"] += numeric_vals[3]
-                        metrics["M_Actual"] += numeric_vals[4]
-                        found_summary = True
-                        break
-            
-            if not found_summary:
-                # Fallback: sum all numeric columns if no explicit total row text is found
-                num_cols = [c for c in df.columns if df[c].apply(clean_val).sum() > 0]
-                if len(num_cols) >= 5:
-                    col_sums = [df[c].apply(clean_val).sum() for c in num_cols[:5]]
-                    metrics["June"] += col_sums[0]
-                    metrics["YTD_Plan"] += col_sums[1]
-                    metrics["YTD_Actual"] += col_sums[2]
-                    metrics["M_Plan"] += col_sums[3]
-                    metrics["M_Actual"] += col_sums[4]
+            # Identify numeric columns (ignoring text columns like Branch Name, District, Location)
+            numeric_cols = []
+            for col in df.columns:
+                col_lower = str(col).lower()
+                if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed"]):
+                    continue
+                # Test if column holds numbers
+                converted = df[col].apply(clean_val)
+                if converted.sum() > 0:
+                # Exclude columns that look like percentage columns (values mostly <= 2 or containing %)
+                    if not all(v <= 3.0 for v in converted[converted > 0]):
+                        numeric_cols.append(col)
+
+            # If we successfully isolated the metric columns (June, YTD Plan, YTD Actual, M. Plan, M. Actual)
+            if len(numeric_cols) >= 5:
+                metrics["June"] += df[numeric_cols[0]].apply(clean_val).sum()
+                metrics["YTD_Plan"] += df[numeric_cols[1]].apply(clean_val).sum()
+                metrics["YTD_Actual"] += df[numeric_cols[2]].apply(clean_val).sum()
+                metrics["M_Plan"] += df[numeric_cols[3]].apply(clean_val).sum()
+                metrics["M_Actual"] += df[numeric_cols[4]].apply(clean_val).sum()
+            elif len(numeric_cols) > 0:
+                # Fallback positional summation of the first 5 numeric columns found
+                all_num_cols = [c for c in df.columns if df[c].apply(clean_val).sum() > 0]
+                if len(all_num_cols) >= 5:
+                    metrics["June"] += df[all_num_cols[0]].apply(clean_val).sum()
+                    metrics["YTD_Plan"] += df[all_num_cols[1]].apply(clean_val).sum()
+                    metrics["YTD_Actual"] += df[all_num_cols[2]].apply(clean_val).sum()
+                    metrics["M_Plan"] += df[all_num_cols[3]].apply(clean_val).sum()
+                    metrics["M_Actual"] += df[all_num_cols[4]].apply(clean_val).sum()
 
     return metrics, matching_sheets
 
@@ -146,7 +146,7 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords) in enumerate(particulars, 1):
-    sums, matched = extract_summary_row_metrics(sheets, keywords)
+    sums, matched = calculate_detail_column_sums(sheets, keywords)
     all_detail_sheets_dict[part_name] = matched
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
@@ -188,7 +188,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("2. Card & Digital Banking Users Summary (August 2026)")
-    st.markdown("Structured exactly to bank standards, extracting the final summary totals from detail workbooks:")
+    st.markdown("Structured exactly to bank standards with correct column-wise detail summation and Position = June Position + YTD Actual:")
     st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="bank_standard_matrix")
 
 with tab2:
@@ -216,8 +216,8 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY MATRIX
    ---------------------------------------------------------------------------------
-   • Summary table successfully linked to the final summary row totals of detail workbooks.
-   • Position As of August 31, 2026 calculated precisely as June 30 Position + YTD Actual.
+   • Summary table successfully calculated via column-wise detail summation.
+   • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
