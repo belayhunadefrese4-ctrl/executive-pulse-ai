@@ -42,12 +42,12 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Balance Sheet Modeling, Deposit Portfolio Mix, Digital Channels & Executive Boardroom Reporting</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Automated Variable Summation | Balance Sheet, Deposits, Customer Base & Digital Channels</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
 uploaded_files = st.sidebar.file_uploader(
-    "Upload Bank Financial Reports (Balance Sheet, Deposits, Segments, ADC)", 
+    "Upload Bank Financial Reports & Detail Workbooks", 
     type=["xlsx", "csv"], 
     accept_multiple_files=True
 )
@@ -77,73 +77,56 @@ if uploaded_files:
         sheets = {}
 
 if not sheets:
-    st.info("👆 Please upload your institutional bank files (Balance Sheet, Deposit Mix, Customer Segments, ATM/Mobile) via the sidebar uploader.")
+    st.info("👆 Please upload your master bank spreadsheets via the sidebar uploader.")
     st.stop()
 
 # ==========================================
-# 2. AUTOMATED FINANCIAL & DOMAIN PARSING
+# 2. AUTOMATED VARIABLE SUMMATION ENGINE
 # ==========================================
-total_records = 0
-total_portfolio_volume = 0.0
+def calculate_variable_sum(sheets_dict, keywords):
+    total_sum = 0.0
+    matching_sheets = 0
+    for s_name, df in sheets_dict.items():
+        if any(k in s_name.lower() for k in keywords):
+            matching_sheets += 1
+            for col in df.select_dtypes(include=[np.number]).columns:
+                total_sum += df[col].sum()
+    return total_sum, matching_sheets
 
-for s_name, df in sheets.items():
-    total_records += len(df)
-    for col in df.select_dtypes(include=[np.number]).columns:
-        total_portfolio_volume += df[col].sum()
+# Calculate exact sums for each required banking variable heading
+atm_sum, atm_count = calculate_variable_sum(sheets, ["atm"])
+mobile_sum, mobile_count = calculate_variable_sum(sheets, ["mobil", "bank", "ussd", "ibmb", "e-birr"])
+pos_sum, pos_count = calculate_variable_sum(sheets, ["pos"])
+qr_sum, qr_count = calculate_variable_sum(sheets, ["qr"])
+cb_sum, cb_count = calculate_variable_sum(sheets, ["customer", "cb", "segment"])
+bs_sum, bs_count = calculate_variable_sum(sheets, ["balance", "sheet", "deposit", "portfolio", "liability", "asset"])
 
-# Categorize domains for executive intelligence
-def classify_domains(sheet_keys):
-    classified = {
-        "Balance Sheet & Deposits": [],
-        "Customer Segments & Base": [],
-        "Digital & Delivery Channels (ADC)": [],
-        "Branch Network & Performance": [],
-        "Other Records": []
-    }
-    for k in sheet_keys:
-        kl = k.lower()
-        if any(w in kl for w in ["balance", "sheet", "deposit", "portfolio", "liability", "asset"]):
-            classified["Balance Sheet & Deposits"].append(k)
-        elif any(w in kl for w in ["customer", "segment", "base", "retail", "corporate", "msme"]):
-            classified["Customer Segments & Base"].append(k)
-        elif any(w in kl for w in ["mobile", "atm", "pos", "qr", "ussd", "ibmb", "agent", "digital", "card", "e-birr"]):
-            classified["Digital & Delivery Channels (ADC)"].append(k)
-        elif any(w in kl for w in ["branch", "district", "location", "performer", "top10", "outlying", "city"]):
-            classified["Branch Network & Performance"].append(k)
-        else:
-            classified["Other Records"].append(k)
-    return classified
+# Build executive summary table with exact variable headings in column 1
+executive_summary_data = [
+    {"Core Banking Variable Heading": "ATM", "Matched Source Sheets": atm_count, "Calculated Total Sum": f"{atm_sum:,.2f}" if atm_sum > 0 else "0.00"},
+    {"Core Banking Variable Heading": "Mobile Bank", "Matched Source Sheets": mobile_count, "Calculated Total Sum": f"{mobile_sum:,.2f}" if mobile_sum > 0 else "0.00"},
+    {"Core Banking Variable Heading": "POS Merchant", "Matched Source Sheets": pos_count, "Calculated Total Sum": f"{pos_sum:,.2f}" if pos_sum > 0 else "0.00"},
+    {"Core Banking Variable Heading": "QR Merchant", "Matched Source Sheets": qr_count, "Calculated Total Sum": f"{qr_sum:,.2f}" if qr_sum > 0 else "0.00"},
+    {"Core Banking Variable Heading": "Customer Base", "Matched Source Sheets": cb_count, "Calculated Total Sum": f"{cb_sum:,.2f}" if cb_sum > 0 else "0.00"},
+    {"Core Banking Variable Heading": "Balance Sheet & Deposits", "Matched Source Sheets": bs_count, "Calculated Total Sum": f"{bs_sum:,.2f}" if bs_sum > 0 else "0.00"},
+]
 
-domain_categories = classify_domains(list(sheets.keys()))
+exec_summary_df = pd.DataFrame(executive_summary_data)
 
 # ==========================================
-# 3. EXECUTIVE DASHBOARD & BOARDROOM TABS
+# 3. EXECUTIVE DASHBOARD & TABS
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Executive KPI Summary",
+    "📊 Executive Summary Table",
     "📑 Multi-Domain Inspector", 
     "📄 Boardroom Report & PPT",
     "📥 Download Master Package"
 ])
 
 with tab1:
-    st.subheader("1. Institutional Financial & Operational KPI Scorecard")
-    st.markdown("Automated metrics aggregated from your uploaded commercial banking master sheets.")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(f'<div class="metric-card"><h4>Active Domains</h4><h2>{len(sheets)}</h2></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f'<div class="metric-card"><h4>Consolidated Records</h4><h2>{total_records:,}</h2></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown(f'<div class="metric-card"><h4>Total Volume</h4><h2>{total_portfolio_volume:,.0f}</h2></div>', unsafe_allow_html=True)
-    with col4:
-        st.markdown(f'<div class="metric-card"><h4>Reporting Cycle</h4><h2>{reporting_period}</h2></div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("Domain Categorization Breakdown")
-    cat_summary_data = [{"Category": cat, "Active Sheets Count": len(keys), "Included Sheets": ", ".join(keys[:3]) + ("..." if len(keys)>3 else "")} for cat, keys in domain_categories.items() if len(keys) > 0]
-    st.data_editor(pd.DataFrame(cat_summary_data), num_rows="dynamic", use_container_width=True, key="cat_summary_table")
+    st.subheader("1. Automated Core Banking Variable Summary")
+    st.markdown("Each heading matches detail source domains, displaying the exact calculated sum directly below.")
+    st.data_editor(exec_summary_df, num_rows="dynamic", use_container_width=True, key="exec_summary_table")
 
 with tab2:
     st.subheader("2. Multi-Select Domain Inspector (Concurrent View)")
@@ -172,27 +155,23 @@ with tab2:
 with tab3:
     st.subheader("3. Executive Narrative Report & Boardroom PPT Outline")
     
-    bs_count = len(domain_categories["Balance Sheet & Deposits"])
-    cust_count = len(domain_categories["Customer Segments & Base"])
-    adc_count = len(domain_categories["Digital & Delivery Channels (ADC)"])
-    branch_count = len(domain_categories["Branch Network & Performance"])
-
     narrative_text = f"""
 ====================================================================================
 EXECUTIVE COMMERCIAL BANKING REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. BALANCE SHEET & FUNDING STRUCTURE REVIEW
+1. CORE BANKING VARIABLE TOTALS
    ---------------------------------------------------------------------------------
-   • Total Ingested Portfolios: {len(sheets)} active domain sheets analyzed.
-   • Balance Sheet & Deposit Modules: {bs_count} dedicated sheet(s) processed.
-   • Total Consolidated Volume: {total_portfolio_volume:,.2f} ETB / Unit calculated dynamically.
+   • ATM Network Total Volume: {atm_sum:,.2f}
+   • Mobile Banking Total Volume: {mobile_sum:,.2f}
+   • POS Merchant Total Volume: {pos_sum:,.2f}
+   • QR Merchant Total Volume: {qr_sum:,.2f}
+   • Customer Base Total Count/Volume: {cb_sum:,.2f}
+   • Balance Sheet & Deposits Total Volume: {bs_sum:,.2f}
 
-2. CUSTOMER SEGMENTATION & DIGITAL EXPANSION (ADC)
+2. OPERATIONAL SUMMARY
    ---------------------------------------------------------------------------------
-   • Customer Segments: {cust_count} domain(s) tracking retail and institutional mix.
-   • Digital Channels: {adc_count} domain(s) monitoring Mobile Banking, ATM, POS, and Agents.
-   • Branch Network Performance: {branch_count} domain(s) evaluating regional distribution.
+   • All figures are dynamically aggregated and linked directly from the detail worksheets.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
@@ -200,18 +179,15 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
 """
 
     ppt_outline = f"""
-SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
-- Reporting Period: {reporting_period}
-- Total Processed Records: {total_records:,} Rows across {len(sheets)} Master Sheets
-- Data Assurance: 100% Original Schema Integrity Preserved
+SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW ({reporting_period})
+- ATM Volume: {atm_sum:,.0f}
+- Mobile Banking Volume: {mobile_sum:,.0f}
+- POS Merchant Volume: {pos_sum:,.0f}
+- QR Merchant Volume: {qr_sum:,.0f}
 
-SLIDE 2: BALANCE SHEET & DEPOSIT PORTFOLIO MIX
-- Consolidated Financial Volume: {total_portfolio_volume:,.0f}
-- Core funding distribution tracked across Demand, Saving, and Fixed Time deposits.
-
-SLIDE 3: DIGITAL CHANNEL & SEGMENT ADOPTION
-- Mobile Banking, ATM Network, and POS/QR Merchant Penetration Metrics.
-- Strategic focus on top and bottom branch performers by district.
+SLIDE 2: BALANCE SHEET & CUSTOMER BASE
+- Customer Base Aggregate: {cb_sum:,.0f}
+- Balance Sheet & Deposits Total: {bs_sum:,.0f}
 """
 
     col_r1, col_r2 = st.columns(2)
@@ -224,18 +200,14 @@ SLIDE 3: DIGITAL CHANNEL & SEGMENT ADOPTION
 
 with tab4:
     st.subheader("4. Automated Multi-Sheet Excel Package Generator")
-    st.markdown("Download the pristine, enterprise-grade multi-sheet workbook containing an auto-calculated summary sheet alongside all source details.")
+    st.markdown("Download the enterprise-grade multi-sheet workbook with the auto-calculated summary sheet placed as the first tab.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        summary_export_df = pd.DataFrame([
-            {"Metric": "Reporting Period", "Value": reporting_period},
-            {"Metric": "Total Ingested Domains", "Value": len(sheets)},
-            {"Metric": "Total Consolidated Records", "Value": total_records},
-            {"Metric": "Aggregated Portfolio Volume", "Value": total_portfolio_volume}
-        ])
-        summary_export_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
+        # Write exact summary table as the first sheet
+        exec_summary_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
         
+        # Write all detail sheets following it
         for s_name, s_df in sheets.items():
             clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
             s_df.to_excel(writer, sheet_name=clean_name, index=False)
