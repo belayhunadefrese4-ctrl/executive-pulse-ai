@@ -19,6 +19,7 @@ st.markdown("""
     .security-badge { background-color: #800020; color: #FFFFFF; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; }
     .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
     .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
+    .metric-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 15px; border-radius: 8px; text-align: center; }
     .stTabs [data-baseweb="tab-list"] { gap: 6px; }
     .stTabs [data-baseweb="tab"] { height: 45px; white-space: pre-wrap; font-weight: 600; font-size: 0.9rem; }
     </style>
@@ -33,20 +34,20 @@ st.sidebar.markdown("### 🔐 Security & Access Control")
 user_key = st.sidebar.text_input("Enter Master Executive Key", type="password")
 
 if user_key != MASTER_SECURITY_KEY:
-    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Cloud Financial Engine</p>', unsafe_allow_html=True)
     st.warning("🔒 Access Restricted: Please enter the valid Master Executive Key in the sidebar.")
     st.stop()
 
 # ==========================================
-# APP HEADER & MULTI-FILE INGESTION HUB
+# APP HEADER & CLOUD MULTI-FILE INGESTION HUB
 # ==========================================
-st.markdown('<p class="main-header">🏦 Executive Pulse AI: Financial Intelligence Engine</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-File Ingestion Hub, Concurrent Sheet Inspector & Clean Executive Summaries</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">🏦 Executive Pulse AI: Cloud Financial Intelligence Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Online Multi-File Ingestion, Automated Balance Sheet, Deposit & Segment Summaries</p>', unsafe_allow_html=True)
 st.markdown("---")
 
-st.sidebar.header("📥 Multi-File Ingestion Hub")
+st.sidebar.header("📥 Cloud Ingestion Hub")
 uploaded_files = st.sidebar.file_uploader(
-    "Upload Multiple Excel/CSV Files", 
+    "Upload Bank Files (Balance Sheet, Deposits, Segments, ATM, Mobile)", 
     type=["xlsx", "csv"], 
     accept_multiple_files=True
 )
@@ -68,53 +69,62 @@ if uploaded_files:
                     s_df.columns = [str(c).strip() for c in s_df.columns]
                     sheet_key = f"{file_prefix} - {s_name}" if len(xls.sheet_names) > 1 else file_prefix
                     sheets[sheet_key] = s_df
-        st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Total Domain Sheet(s)")
+        st.sidebar.success(f"✅ Loaded {len(uploaded_files)} File(s) | {len(sheets)} Domain Sheet(s)")
     except Exception as e:
         st.sidebar.error(f"Error reading files: {e}")
         sheets = {}
 
 if not sheets:
-    st.info("👆 Please upload your master files using the sidebar uploader.")
+    st.info("👆 Please upload your online master bank files using the sidebar uploader.")
     st.stop()
 
-# Combined total records for metric summaries
-combined_master = pd.concat(sheets.values(), ignore_index=True) if sheets else pd.DataFrame()
+# ==========================================
+# 2. AUTOMATED DATA PARSING & CALCULATIONS
+# ==========================================
+combined_master = pd.concat(sheets.values(), ignore_index=True, sort=False) if sheets else pd.DataFrame()
 
-# Helper function to categorize sheet names into domain categories
-def categorize_sheets(sheet_keys):
-    cats = {
-        "Digital & Mobile Channels": 0,
-        "Customer Base & Deposits": 0,
-        "Branch Performance & Leaderboards": 0,
-        "Strategic Plans & Targets": 0,
-        "Raw Data & Other Records": 0
-    }
-    for k in sheet_keys:
-        kl = k.lower()
-        if any(w in kl for w in ["mobile", "card", "qr", "pos", "ussd", "ibmb", "agent", "digital", "e-birr", "school", "atm"]):
-            cats["Digital & Mobile Channels"] += 1
-        elif any(w in kl for w in ["cb", "customer", "product", "deposit", "account"]):
-            cats["Customer Base & Deposits"] += 1
-        elif any(w in kl for w in ["top10", "least", "performer", "district", "location", "achievement"]):
-            cats["Branch Performance & Leaderboards"] += 1
-        elif any(w in kl for w in ["plan", "corporate", "outreach", "target"]):
-            cats["Strategic Plans & Targets"] += 1
-        else:
-            cats["Raw Data & Other Records"] += 1
-    return cats
+def extract_numeric_totals(df):
+    total_val = 0.0
+    for col in df.select_dtypes(include=[np.number]).columns:
+        total_val += df[col].sum()
+    return total_val
+
+total_portfolio_volume = extract_numeric_totals(combined_master)
 
 # ==========================================
-# 2. EXECUTIVE TABS & CONCURRENT INSPECTOR
+# 3. EXECUTIVE DASHBOARD TABS
 # ==========================================
-tab1, tab2, tab3 = st.tabs([
-    "📊 Multi-Sheet Inspector", 
-    "📄 Executive Summary & PPT",
-    "📥 Download Package"
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Automated Summary",
+    "📑 Multi-Sheet Inspector", 
+    "📄 Report & PPT Outline",
+    "📥 Download Master Package"
 ])
 
 with tab1:
-    st.subheader("1. Ingested Master Sheets Inspector (Multi-Select View)")
-    st.markdown("Select specific sheets below to inspect and compare side-by-side or stacked.")
+    st.subheader("1. Automated High-Level Financial Summary")
+    st.markdown("Calculated dynamically from your online uploaded detail sheets (Balance Sheet, Deposits, Segments, Channels).")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f'<div class="metric-card"><h4>Total Domains</h4><h2>{len(sheets)}</h2></div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'<div class="metric-card"><h4>Total Records</h4><h2>{len(combined_master):,}</h2></div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'<div class="metric-card"><h4>Aggregated Volume</h4><h2>{total_portfolio_volume:,.0f}</h2></div>', unsafe_allow_html=True)
+    with col4:
+        st.markdown(f'<div class="metric-card"><h4>Period</h4><h2>{reporting_period}</h2></div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.subheader("Domain Sheet Quick Overview")
+    summary_overview_df = pd.DataFrame([
+        {"Sheet Domain": k, "Row Count": len(v), "Column Count": len(v.columns)} for k, v in sheets.items()
+    ])
+    st.data_editor(summary_overview_df, num_rows="dynamic", use_container_width=True, key="summary_overview_table")
+
+with tab2:
+    st.subheader("2. Ingested Master Sheets Inspector (Multi-Select View)")
+    st.markdown("Select multiple sheets below to view and compare them concurrently side-by-side or stacked.")
     
     selected_sheets_to_view = st.multiselect(
         "Select Sheets to Inspect:",
@@ -136,35 +146,26 @@ with tab1:
     else:
         st.info("Please select at least one sheet above to display its contents.")
 
-with tab2:
-    st.subheader("2. Executive Narrative Report & Boardroom PPT Outline")
+with tab3:
+    st.subheader("3. Executive Narrative Report & Boardroom PPT Outline")
     
-    total_sheets_count = len(sheets)
-    total_records = len(combined_master)
-    domain_summary = categorize_sheets(list(sheets.keys()))
-
-    domain_breakdown_str = "\n".join([f"   • {cat}: {count} domain sheet(s)" for cat, count in domain_summary.items() if count > 0])
+    sheet_names_list = ", ".join(list(sheets.keys()))
 
     narrative_text = f"""
 ====================================================================================
 EXECUTIVE FINANCIAL & OPERATIONAL REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. INGESTION SCOPE & DOMAIN INTEGRITY
+1. BALANCE SHEET & DEPOSIT PERFORMANCE SUMMARY
    ---------------------------------------------------------------------------------
-   • Total Ingested Domains / Sheets: {total_sheets_count} Sheets across Uploaded Master Files
-   • Consolidated Master Records: {total_records:,.0f} Total Rows Processed
-   • Structure Integrity: Zero Truncation / All Original Schema Headers Preserved
+   • Total Ingested Domain Sheets: {len(sheets)} ({sheet_names_list})
+   • Consolidated Master Records: {len(combined_master):,} total data points processed.
+   • Total Aggregated Portfolio Volume: {total_portfolio_volume:,.2f} calculated dynamically.
 
-2. DOMAIN CATEGORY BREAKDOWN
+2. CUSTOMER BASE & SEGMENT DISTRIBUTION
    ---------------------------------------------------------------------------------
-{domain_breakdown_str}
-
-3. EXECUTIVE OPERATIONAL SUMMARY
-   ---------------------------------------------------------------------------------
-   • Multi-file ingestion successfully consolidated all regional branch performance, 
-     digital banking channels (Mobile, USSD, Card, POS, QR, Agent), and customer base records.
-   • Data is organized for executive evaluation and boardroom presentation.
+   • Online multi-file ingestion successfully aggregates balance sheets, deposit breakdowns, 
+     customer segments, and digital channels (ATM & Mobile banking) into a cohesive view.
 
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI ENGINE
@@ -174,18 +175,14 @@ CERTIFIED BY EXECUTIVE PULSE AI ENGINE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE OVERVIEW
 - Reporting Period: {reporting_period}
-- Total Processed Records: {total_records:,.0f} Rows across {total_sheets_count} Integrated Sheets
-- Data Assurance: 100% Schema Preservation with Zero Row Loss
+- Total Processed Records: {len(combined_master):,} Rows across {len(sheets)} Domains
 
-SLIDE 2: DOMAIN COVERAGE & ARCHITECTURE
-- Digital Channels & Mobile Banking ({domain_summary['Digital & Mobile Channels']} Sheets)
-- Customer Base & Deposit Mix ({domain_summary['Customer Base & Deposits']} Sheets)
-- Regional & Branch Leaderboards ({domain_summary['Branch Performance & Leaderboards']} Sheets)
-- Strategic Plans & Corporate Targets ({domain_summary['Strategic Plans & Targets']} Sheets)
+SLIDE 2: BALANCE SHEET & DEPOSIT STRUCTURE
+- Consolidated Volume: {total_portfolio_volume:,.0f}
+- Detailed breakdown preserved across Deposit Reports, Customer Segments, and Channels.
 
 SLIDE 3: STRATEGIC ACTION POINTS
-- Focus performance monitoring on top and bottom 10 branch performers.
-- Accelerate digital channel adoption (Mobile Banking, POS, and Agent Outlets).
+- Monitor balance sheet liquidity and digital channel outreach metrics.
 """
 
     col_r1, col_r2 = st.columns(2)
@@ -196,16 +193,23 @@ SLIDE 3: STRATEGIC ACTION POINTS
         st.markdown("##### 📊 Boardroom PPT Slide Outline")
         st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
 
-with tab3:
-    st.subheader("3. Consolidated Multi-Sheet Excel Package Generator")
-    st.markdown("Download the fully structured Excel package containing all separate domain sheets cleanly organized.")
+with tab4:
+    st.subheader("4. Automated Multi-Sheet Excel Package Generator")
+    st.markdown("Download the fully structured Excel package containing an auto-calculated summary sheet alongside all pristine detail sheets.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        for idx, (s_name, s_df) in enumerate(sheets.items()):
-            # Excel sheet names must be <= 31 characters
-            clean_name = f"S{idx+1}_" + str(s_name).split(" - ")[-1][:25].replace("/", "_").replace("\\", "_")
-            s_df.to_excel(writer, sheet_name=clean_name[:31], index=False)
+        summary_export_df = pd.DataFrame([
+            {"Metric": "Reporting Period", "Value": reporting_period},
+            {"Metric": "Total Ingested Domains", "Value": len(sheets)},
+            {"Metric": "Total Consolidated Records", "Value": len(combined_master)},
+            {"Metric": "Aggregated Portfolio Volume", "Value": total_portfolio_volume}
+        ])
+        summary_export_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
+        
+        for s_name, s_df in sheets.items():
+            clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
+            s_df.to_excel(writer, sheet_name=clean_name, index=False)
 
     st.download_button(
         label="📥 Download Complete Multi-Sheet Executive Package (.xlsx)",
