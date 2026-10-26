@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Exact Column Matching Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Flexible Keyword Matching Engine</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -93,12 +93,12 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. EXACT COLUMN MATCHING & ROLL-UP
+# 2. FLEXIBLE COLUMN MAPPING & ROLL-UP
 # ==========================================
-def clean_sum_by_keyword(df, keywords):
+def clean_sum_by_keywords(df, possible_keywords):
     for col in df.columns:
         c_low = str(col).lower()
-        if any(k in c_low for k in keywords):
+        if any(k in c_low for k in possible_keywords):
             selected = df[col]
             if isinstance(selected, pd.DataFrame):
                 selected = selected.iloc[:, 0]
@@ -118,12 +118,22 @@ for idx, (s_key, df) in enumerate(sheets.items()):
     if df is None or df.empty:
         continue
         
-    # Strictly target exact bank header keywords
-    s_june = clean_sum_by_keyword(df, ["june", "jun"])
-    s_ytd_plan = clean_sum_by_keyword(df, ["ytd. plan", "ytd plan"])
-    s_ytd_act = clean_sum_by_keyword(df, ["ytd. actual", "ytd actual", "ytd.act"])
-    s_m_plan = clean_sum_by_keyword(df, ["m.plan", "month plan", "m plan"])
-    s_m_act = clean_sum_by_keyword(df, ["m. actual", "m actual", "month actual"])
+    # Flexible keyword matching covering variations like 'June', 'Jun', 'As of June'
+    s_june = clean_sum_by_keywords(df, ["june", "jun"])
+    s_ytd_plan = clean_sum_by_keywords(df, ["ytd. plan", "ytd plan", "plan"])
+    s_ytd_act = clean_sum_by_keywords(df, ["ytd. actual", "ytd actual", "ytd.act", "actual"])
+    s_m_plan = clean_sum_by_keywords(df, ["m.plan", "month plan", "m plan", "monthly plan"])
+    s_m_act = clean_sum_by_keywords(df, ["m. actual", "m actual", "month actual", "monthly actual"])
+
+    # If specific keyword lookup returns 0, fallback to positional numeric columns after text metadata
+    if s_june == 0.0 and s_ytd_plan == 0.0:
+        text_headers = ["branch", "code", "name", "district", "location", "particular", "variable", "item", "description"]
+        num_cols = [c for c in df.columns if not any(t in str(c).lower() for t in text_headers) and "unnamed" not in str(c).lower()]
+        if len(num_cols) > 0: s_june = clean_sum_by_keywords(df, [str(num_cols[0])])
+        if len(num_cols) > 1: s_ytd_plan = clean_sum_by_keywords(df, [str(num_cols[1])])
+        if len(num_cols) > 2: s_ytd_act = clean_sum_by_keywords(df, [str(num_cols[2])])
+        if len(num_cols) > 3: s_m_plan = clean_sum_by_keywords(df, [str(num_cols[3])])
+        if len(num_cols) > 4: s_m_act = clean_sum_by_keywords(df, [str(num_cols[4])])
 
     # Mandatory Banking Calculation Rule: Position As of August 31 = June 30 Position + YTD Actual
     position_august = s_june + s_ytd_act
@@ -176,20 +186,16 @@ with tab2:
         
         detail_df = sheets[selected_sheet].copy()
         
-        # Build safe summary totals for detail view without duplicate index crash
+        # Build safe summary totals for detail view
         total_vals = {}
         for c in detail_df.columns:
-            c_low = str(c).lower()
-            if any(k in c_low for k in ["june", "ytd", "plan", "actual", "position"]):
-                col_sum = clean_sum_by_keyword(detail_df, [c_low])
-                total_vals[c] = f"{col_sum:,.0f}" if col_sum > 0 else ""
-            else:
-                total_vals[c] = ""
+            col_sum = clean_sum_by_keywords(detail_df, [str(c).lower()])
+            total_vals[c] = f"{col_sum:,.0f}" if col_sum > 0 else ""
                 
         if len(detail_df.columns) > 0:
             total_vals[detail_df.columns[0]] = "GRAND TOTAL"
             
-        detail_df.loc[len(detail_df)] = total_vals
+        detail_df = pd.concat([detail_df, pd.DataFrame([total_vals])], ignore_index=True)
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
@@ -202,7 +208,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with precise keyword column matching.
+   • Master summary compiled successfully with flexible keyword column matching.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
