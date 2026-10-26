@@ -42,7 +42,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Robust Direct File Mapping & Position Rules</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Standard Bank Reporting Matrix with Robust Column Summation & Position Rules</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -81,7 +81,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. ROBUST COLUMN-WISE SUMMATION WITH FALLBACK MAPPING
+# 2. ROBUST COLUMN SUMMATION ENGINE
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
@@ -92,43 +92,41 @@ def clean_val(val):
     except ValueError:
         return 0.0
 
-def extract_metrics_for_index(sheets_list, sheet_idx, keywords):
+def extract_metrics_robust(sheets_dict, index, keywords):
     metrics = {"June": 0.0, "YTD_Plan": 0.0, "YTD_Actual": 0.0, "M_Plan": 0.0, "M_Actual": 0.0}
     target_df = None
     
-    # 1. Try keyword match first
-    for s_name, df in sheets_list.items():
+    # 1. Keyword match
+    for s_name, df in sheets_dict.items():
         if any(k in s_name.lower() for k in keywords):
             target_df = df
             break
             
-    # 2. If no keyword match, fallback to sequential file mapping (File 1 -> ATM, File 2 -> Mobile Bank, etc.)
-    if target_df is None and len(sheets_list) > 0:
-        sheet_keys = list(sheets_list.keys())
-        if sheet_idx < len(sheet_keys):
-            target_df = sheets_list[sheet_keys[sheet_idx]]
-        else:
-            target_df = list(sheets_list.values())[0] # ultimate fallback to first sheet
+    # 2. Sequential fallback if keyword not found
+    if target_df is None and len(sheets_dict) > 0:
+        sheet_keys = list(sheets_dict.keys())
+        target_df = sheets_dict[sheet_keys[index % len(sheet_keys)]]
 
     if target_df is not None:
-        # Extract numeric columns, ignoring text/metadata columns
+        # Isolate numeric columns
         numeric_cols = []
         for col in target_df.columns:
             col_lower = str(col).lower()
-            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed"]):
+            if any(w in col_lower for w in ["branch", "district", "location", "name", "#", "unnamed", "city", "region"]):
                 continue
             converted = target_df[col].apply(clean_val)
             if converted.sum() > 0:
                 numeric_cols.append(col)
 
+        # If we have at least 5 numeric columns (June, YTD Plan, YTD Actual, M Plan, M Actual)
         if len(numeric_cols) >= 5:
             metrics["June"] = target_df[numeric_cols[0]].apply(clean_val).sum()
             metrics["YTD_Plan"] = target_df[numeric_cols[1]].apply(clean_val).sum()
             metrics["YTD_Actual"] = target_df[numeric_cols[2]].apply(clean_val).sum()
             metrics["M_Plan"] = target_df[numeric_cols[3]].apply(clean_val).sum()
             metrics["M_Actual"] = target_df[numeric_cols[4]].apply(clean_val).sum()
-        elif len(numeric_cols) > 0:
-            # Fallback positional summation
+        else:
+            # Fallback to positional numeric columns
             all_num = [c for c in target_df.columns if target_df[c].apply(clean_val).sum() > 0]
             if len(all_num) >= 5:
                 metrics["June"] = target_df[all_num[0]].apply(clean_val).sum()
@@ -152,7 +150,7 @@ summary_rows = []
 all_detail_sheets_dict = {}
 
 for idx, (part_name, keywords) in enumerate(particulars):
-    sums, matched_df = extract_metrics_for_index(sheets, idx, keywords)
+    sums, matched_df = extract_metrics_robust(sheets, idx, keywords)
     all_detail_sheets_dict[part_name] = {str(idx): matched_df} if matched_df is not None else {}
     
     # Exact Bank Rule: Position As of August 31 = June 30 Position + YTD Actual
