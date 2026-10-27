@@ -30,7 +30,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Branch Analytics & Custom Branded Visualizations</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Branch Analytics & Comprehensive Master Package Export</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -220,9 +220,12 @@ with tab2:
         detail_df.loc[len(detail_df)] = total_list
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
+# Global containers for rankings to use in export package
+export_rankings_dict = {}
+
 with tab3:
     st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
-    st.markdown(f"Active Legend: <span class='plan-badge'>Plan</span> &nbsp;&nbsp;&nbsp; <span class='actual-badge'>Actual</span> (Colors dynamically reflect your sidebar pickers).", unsafe_allow_html=True)
+    st.markdown(f"Active Legend: <span class='plan-badge'>Plan</span> &nbsp;&nbsp;&nbsp; <span class='actual-badge'>Actual</span>", unsafe_allow_html=True)
     
     rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
@@ -261,11 +264,18 @@ with tab3:
         rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if ytd_pct_col else rank_df["_sort_ytd_act"]
         rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if m_pct_col else rank_df["_sort_m_act"]
 
-        # Helper function to render customized Altair colored charts
+        sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+        sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_act", ascending=True)
+        top_10_ytd = sorted_ytd_top.head(10).drop(columns=[c for c in sorted_ytd_top.columns if c.startswith("_")])
+        least_10_ytd = sorted_ytd_least.head(10).drop(columns=[c for c in sorted_ytd_least.columns if c.startswith("_")])
+
+        # Store for export
+        export_rankings_dict["Top_10_YTD"] = top_10_ytd
+        export_rankings_dict["Least_10_YTD"] = least_10_ytd
+
         def render_custom_altair_chart(df_subset, p_col, a_col, chart_title):
             if branch_name_col not in df_subset.columns:
                 return
-            
             plot_df = df_subset.set_index(branch_name_col)[[p_col, a_col]].reset_index()
             plot_df.columns = ["Branch", "Plan", "Actual"]
             melted = plot_df.melt(id_vars="Branch", value_vars=["Plan", "Actual"], var_name="Metric", value_name="Amount")
@@ -277,79 +287,54 @@ with tab3:
                 xOffset='Metric:N',
                 tooltip=['Branch', 'Metric', 'Amount']
             ).properties(title=chart_title, height=300).configure_view(stroke=None)
-            
             st.altair_chart(chart, use_container_width=True)
 
         col_t1, col_t2 = st.columns(2)
-        
         with col_t1:
             st.markdown("#### 🥇 YTD Performance Rankings & Charts")
-            sort_metric_ytd = st.radio("Rank YTD by:", ["YTD Actual Volume", "YTD % Achievement"], horizontal=True, key="sort_ytd_type")
-            
-            if sort_metric_ytd == "YTD Actual Volume":
-                sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
-                sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_act", ascending=True)
-            else:
-                sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
-                sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_pct", ascending=True)
-
-            top_10_ytd = sorted_ytd_top.head(10)
-            least_10_ytd = sorted_ytd_least.head(10)
-
             st.markdown("##### Top 10 Branches (YTD)")
-            st.dataframe(top_10_ytd.drop(columns=[c for c in top_10_ytd.columns if c.startswith("_")]), use_container_width=True)
-            render_custom_altair_chart(top_10_ytd, "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
+            st.dataframe(top_10_ytd, use_container_width=True)
+            render_custom_altair_chart(rank_df.sort_values(by="_sort_ytd_act", ascending=False).head(10), "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
-            st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
-            render_custom_altair_chart(least_10_ytd, "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
+            st.dataframe(least_10_ytd, use_container_width=True)
+            render_custom_altair_chart(rank_df.sort_values(by="_sort_ytd_act", ascending=True).head(10), "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
 
         with col_t2:
             st.markdown("#### 📅 Monthly Performance Rankings & Charts")
-            sort_metric_m = st.radio("Rank Monthly by:", ["Monthly Actual Volume", "Monthly % Achievement"], horizontal=True, key="sort_m_type")
+            sorted_m_top = rank_df.sort_values(by="_sort_m_act", ascending=False)
+            sorted_m_least = rank_df.sort_values(by="_sort_m_act", ascending=True)
+            top_10_m = sorted_m_top.head(10).drop(columns=[c for c in sorted_m_top.columns if c.startswith("_")])
+            least_10_m = sorted_m_least.head(10).drop(columns=[c for c in sorted_m_least.columns if c.startswith("_")])
             
-            if sort_metric_m == "Monthly Actual Volume":
-                sorted_m_top = rank_df.sort_values(by="_sort_m_act", ascending=False)
-                sorted_m_least = rank_df.sort_values(by="_sort_m_act", ascending=True)
-            else:
-                sorted_m_top = rank_df.sort_values(by="_sort_m_pct", ascending=False)
-                sorted_m_least = rank_df.sort_values(by="_sort_m_pct", ascending=True)
-
-            top_10_m = sorted_m_top.head(10)
-            least_10_m = sorted_m_least.head(10)
+            export_rankings_dict["Top_10_Monthly"] = top_10_m
+            export_rankings_dict["Least_10_Monthly"] = least_10_m
 
             st.markdown("##### Top 10 Branches (Monthly)")
-            st.dataframe(top_10_m.drop(columns=[c for c in top_10_m.columns if c.startswith("_")]), use_container_width=True)
-            render_custom_altair_chart(top_10_m, "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
+            st.dataframe(top_10_m, use_container_width=True)
+            render_custom_altair_chart(sorted_m_top.head(10), "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
-            st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
-            render_custom_altair_chart(least_10_m, "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
+            st.dataframe(least_10_m, use_container_width=True)
+            render_custom_altair_chart(sorted_m_least.head(10), "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
-    
     narrative_text = f"""
 ====================================================================================
 COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 ====================================================================================
-
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX & VISUAL ANALYTICS
-   ---------------------------------------------------------------------------------
    • Master summary compiled successfully with Top/Least 10 branch rankings and charts.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
-
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
 ====================================================================================
 """
-
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
-- Multi-variable consolidated summary table.
-- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Custom Charts.
+- Multi-variable consolidated summary table & Top/Least 10 branch rankings.
 """
-
     col_r1, col_r2 = st.columns(2)
     with col_r1:
         st.markdown("##### 📄 Boardroom Executive Report")
@@ -360,18 +345,34 @@ SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 
 with tab5:
     st.subheader("📥 Download Master Package")
-    st.markdown("Download the fully structured Excel workbook containing the summarized master table as the first sheet.")
+    st.markdown("Download the fully structured Excel workbook containing the summarized master table, top/least rankings, and all detailed branch source workbooks.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        # Sheet 1: Master Summary Roll-up
         exec_summary_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
+        
+        # Sheet 2-5: Top & Least Rankings (if generated)
+        for r_name, r_df in export_rankings_dict.items():
+            r_df.to_excel(writer, sheet_name=r_name[:30], index=False)
+
+        # Sheets onwards: All Individual Detail Workbooks with Grand Totals
         for s_name, s_df in sheets.items():
             clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
-            s_df.to_excel(writer, sheet_name=clean_name, index=False)
+            export_df = s_df.copy()
+            total_list = []
+            for i, c in enumerate(export_df.columns):
+                if i == 0:
+                    total_list.append("GRAND TOTAL")
+                else:
+                    col_sum = clean_sum_by_keywords(export_df, [str(c).lower()])
+                    total_list.append(f"{col_sum:,.0f}" if col_sum > 0 else "")
+            export_df.loc[len(export_df)] = total_list
+            export_df.to_excel(writer, sheet_name=clean_name, index=False)
 
     st.download_button(
         label="📥 Download Complete Enterprise Multi-Sheet Package (.xlsx)",
         data=excel_buffer.getvalue(),
-        file_name=f"Enterprise_Bank_Package_{reporting_period}.xlsx",
+        file_name=f"Enterprise_Bank_Master_Package_{reporting_period}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
