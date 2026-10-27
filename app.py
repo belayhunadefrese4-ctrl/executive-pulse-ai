@@ -12,15 +12,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-    <style>
-    .main-header { font-size: 2.2rem; font-weight: 800; color: #800020; letter-spacing: -0.5px; }
-    .sub-header { font-size: 1.05rem; color: #334155; margin-bottom: 20px; }
-    .report-box { background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid #800020; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }
-    .ppt-box { background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }
-    </style>
-""", unsafe_allow_html=True)
-
 # ==========================================
 # 1. SECURITY & ACCESS CONTROL
 # ==========================================
@@ -30,15 +21,15 @@ st.sidebar.markdown("### 🔐 Security & Access Control")
 user_key = st.sidebar.text_input("Enter Master Executive Key", type="password")
 
 if user_key != MASTER_SECURITY_KEY:
-    st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Engine</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Engine</p>', unsafe_allow_html=True)
     st.warning("🔒 Access Restricted: Please enter the valid Master Executive Key in the sidebar.")
     st.stop()
 
 # ==========================================
 # APP HEADER & INGESTION HUB
 # ==========================================
-st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Native Visualizations</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Branch Analytics & Custom Branded Visualizations</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -53,9 +44,19 @@ reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 
 # 🎨 CHART COLOR CUSTOMIZER WIDGET
 # ==========================================
 st.sidebar.markdown("---")
-st.sidebar.header("🎨 Chart Color Customizer")
-plan_color = st.sidebar.color_picker("Plan Color (Default: Black)", "#111827")
-actual_color = st.sidebar.color_picker("Actual Color (Default: Burgundy)", "#800020")
+st.sidebar.header("🎨 Chart & Brand Color Customizer")
+plan_color = st.sidebar.color_picker("Plan Color", "#111827")
+actual_color = st.sidebar.color_picker("Actual Color", "#800020")
+
+# Inject dynamic custom CSS for color customization across metrics & legends
+st.markdown(f"""
+    <style>
+    .plan-badge {{ background-color: {plan_color}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }}
+    .actual-badge {{ background-color: {actual_color}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }}
+    .report-box {{ background-color: #FAFAFA; border: 1px solid #CBD5E1; border-left: 5px solid {actual_color}; padding: 20px; border-radius: 6px; font-family: 'Times New Roman', Times, serif; }}
+    .ppt-box {{ background-color: #F8FAFC; border: 1px solid #94A3B8; border-left: 5px solid #475569; padding: 20px; border-radius: 6px; font-family: monospace; }}
+    </style>
+""", unsafe_allow_html=True)
 
 # Helper to ensure unique column names
 def make_unique_cols(cols):
@@ -219,8 +220,8 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
-    st.subheader("🏆 Branch Performance Analytics & Native Visualizations")
-    st.markdown(f"Comparing Plan (<span style='color:{plan_color}; font-weight:bold;'>■ Plan</span>) vs Actual (<span style='color:{actual_color}; font-weight:bold;'>■ Actual</span>).", unsafe_allow_html=True)
+    st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
+    st.markdown(f"Legend: <span class='plan-badge'>Plan</span> (Custom Black) vs <span class='actual-badge'>Actual</span> (Custom Burgundy). Values are explicitly labeled.", unsafe_allow_html=True)
     
     rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
@@ -282,11 +283,13 @@ with tab3:
                 chart_df = top_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
                 chart_df.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df)
+                
+                # Branded Value Cards for Plan vs Actual
                 for idx, row in top_10_ytd.iterrows():
                     b_name = row[branch_name_col]
                     p_val = row["_sort_ytd_plan"]
                     a_val = row["_sort_ytd_act"]
-                    st.markdown(f"- **{b_name}** ➔ Plan: **{p_val:,.0f}** | Actual: **{a_val:,.0f}**")
+                    st.markdown(f"📌 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
             st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
@@ -295,11 +298,12 @@ with tab3:
                 chart_df_least = least_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
                 chart_df_least.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_least)
+                
                 for idx, row in least_10_ytd.iterrows():
                     b_name = row[branch_name_col]
                     p_val = row["_sort_ytd_plan"]
                     a_val = row["_sort_ytd_act"]
-                    st.markdown(f"- **{b_name}** ➔ Plan: **{p_val:,.0f}** | Actual: **{a_val:,.0f}**")
+                    st.markdown(f"📌 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
 
         with col_t2:
             st.markdown("#### 📅 Monthly Performance Rankings & Charts")
@@ -322,11 +326,12 @@ with tab3:
                 chart_df_m = top_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
                 chart_df_m.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_m)
+                
                 for idx, row in top_10_m.iterrows():
                     b_name = row[branch_name_col]
                     p_val = row["_sort_m_plan"]
                     a_val = row["_sort_m_act"]
-                    st.markdown(f"- **{b_name}** ➔ Plan: **{p_val:,.0f}** | Actual: **{a_val:,.0f}**")
+                    st.markdown(f"📌 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
             st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
@@ -335,11 +340,12 @@ with tab3:
                 chart_df_m_least = least_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
                 chart_df_m_least.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_m_least)
+                
                 for idx, row in least_10_m.iterrows():
                     b_name = row[branch_name_col]
                     p_val = row["_sort_m_plan"]
                     a_val = row["_sort_m_act"]
-                    st.markdown(f"- **{b_name}** ➔ Plan: **{p_val:,.0f}** | Actual: **{a_val:,.0f}**")
+                    st.markdown(f"📌 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -362,7 +368,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Labeled Breakdown.
+- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Breakdown.
 """
 
     col_r1, col_r2 = st.columns(2)
