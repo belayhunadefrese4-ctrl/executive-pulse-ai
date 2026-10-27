@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import io
 import altair as alt
+import openpyxl
+from openpyxl.drawing.image import Image as XLImage
 
 # ==========================================
 # PAGE CONFIGURATION & EXECUTIVE STYLING
@@ -30,7 +32,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Dynamic Period Headers & Master Package Export</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Dynamic Period Headers & Master Package with Embedded Charts</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -57,7 +59,6 @@ st.sidebar.header("🎨 Chart & Brand Color Customizer")
 plan_color = st.sidebar.color_picker("Plan Color", "#111827")
 actual_color = st.sidebar.color_picker("Actual Color", "#800020")
 
-# Inject dynamic custom CSS for legend badges
 st.markdown(f"""
     <style>
     .plan-badge {{ background-color: {plan_color}; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; display: inline-block; }}
@@ -165,7 +166,6 @@ for idx, (s_key, df) in enumerate(sheets.items()):
         if len(num_cols) > 3: s_m_plan = clean_sum_by_keywords(df, [str(num_cols[3])])
         if len(num_cols) > 4: s_m_act = clean_sum_by_keywords(df, [str(num_cols[4])])
 
-    # Mandatory Banking Calculation Rule: Position = June 30 Position + YTD Actual
     position_total = s_june + s_ytd_act
     ytd_pct = (s_ytd_act / s_ytd_plan * 100) if s_ytd_plan > 0 else 0.0
     m_pct = (s_m_act / s_m_plan * 100) if s_m_plan > 0 else 0.0
@@ -216,8 +216,6 @@ with tab2:
         st.markdown(f"**Showing full branch breakdown and automated Grand Total for `{selected_sheet}`:**")
         
         detail_df = sheets[selected_sheet].copy()
-        
-        # Dynamically update the position header in the detail view if present
         for col in detail_df.columns:
             if "position" in str(col).lower() or "august" in str(col).lower():
                 detail_df.rename(columns={col: pos_header}, inplace=True)
@@ -235,6 +233,7 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 export_rankings_dict = {}
+chart_objects = {}
 
 with tab3:
     st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
@@ -285,9 +284,9 @@ with tab3:
         export_rankings_dict["Top_10_YTD"] = top_10_ytd
         export_rankings_dict["Least_10_YTD"] = least_10_ytd
 
-        def render_custom_altair_chart(df_subset, p_col, a_col, chart_title):
+        def get_altair_chart(df_subset, p_col, a_col, chart_title):
             if branch_name_col not in df_subset.columns:
-                return
+                return None
             plot_df = df_subset.set_index(branch_name_col)[[p_col, a_col]].reset_index()
             plot_df.columns = ["Branch", "Plan", "Actual"]
             melted = plot_df.melt(id_vars="Branch", value_vars=["Plan", "Actual"], var_name="Metric", value_name="Amount")
@@ -298,19 +297,25 @@ with tab3:
                 color=alt.Color('Metric:N', scale=alt.Scale(domain=['Plan', 'Actual'], range=[plan_color, actual_color]), legend=alt.Legend(title="")),
                 xOffset='Metric:N',
                 tooltip=['Branch', 'Metric', 'Amount']
-            ).properties(title=chart_title, height=300).configure_view(stroke=None)
-            st.altair_chart(chart, use_container_width=True)
+            ).properties(title=chart_title, width=600, height=300).configure_view(stroke=None)
+            return chart
+
+        c_top_ytd = get_altair_chart(sorted_ytd_top.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
+        c_least_ytd = get_altair_chart(sorted_ytd_least.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
+        
+        if c_top_ytd: chart_objects["Top_10_YTD_Chart"] = c_top_ytd
+        if c_least_ytd: chart_objects["Least_10_YTD_Chart"] = c_least_ytd
 
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             st.markdown("#### 🥇 YTD Performance Rankings & Charts")
             st.markdown("##### Top 10 Branches (YTD)")
             st.dataframe(top_10_ytd, use_container_width=True)
-            render_custom_altair_chart(rank_df.sort_values(by="_sort_ytd_act", ascending=False).head(10), "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
+            if c_top_ytd: st.altair_chart(c_top_ytd, use_container_width=True)
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
             st.dataframe(least_10_ytd, use_container_width=True)
-            render_custom_altair_chart(rank_df.sort_values(by="_sort_ytd_act", ascending=True).head(10), "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
+            if c_least_ytd: st.altair_chart(c_least_ytd, use_container_width=True)
 
         with col_t2:
             st.markdown("#### 📅 Monthly Performance Rankings & Charts")
@@ -322,13 +327,19 @@ with tab3:
             export_rankings_dict["Top_10_Monthly"] = top_10_m
             export_rankings_dict["Least_10_Monthly"] = least_10_m
 
+            c_top_m = get_altair_chart(sorted_m_top.head(10), "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
+            c_least_m = get_altair_chart(sorted_m_least.head(10), "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
+            
+            if c_top_m: chart_objects["Top_10_Monthly_Chart"] = c_top_m
+            if c_least_m: chart_objects["Least_10_Monthly_Chart"] = c_least_m
+
             st.markdown("##### Top 10 Branches (Monthly)")
             st.dataframe(top_10_m, use_container_width=True)
-            render_custom_altair_chart(sorted_m_top.head(10), "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
+            if c_top_m: st.altair_chart(c_top_m, use_container_width=True)
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
             st.dataframe(least_10_m, use_container_width=True)
-            render_custom_altair_chart(sorted_m_least.head(10), "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
+            if c_least_m: st.altair_chart(c_least_m, use_container_width=True)
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -357,7 +368,7 @@ SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 
 with tab5:
     st.subheader("📥 Download Master Package")
-    st.markdown("Download the fully structured Excel workbook containing the summarized master table, top/least rankings, and all detailed branch source workbooks.")
+    st.markdown("Download the fully structured Excel workbook containing the summarized master table, top/least rankings, embedded visual charts, and all detailed branch source workbooks.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
@@ -383,9 +394,26 @@ with tab5:
             export_df.loc[len(export_df)] = total_list
             export_df.to_excel(writer, sheet_name=clean_name, index=False)
 
+    # Post-process workbook with openpyxl to embed charts as images onto ranking sheets
+    excel_buffer.seek(0)
+    wb = openpyxl.load_workbook(excel_buffer)
+    
+    for chart_name, chart_obj in chart_objects.items():
+        if chart_name in wb.sheetnames:
+            ws = wb[chart_name]
+            img_bytes = chart_obj.to_image(format='png')
+            img_io = io.BytesIO(img_bytes)
+            img = XLImage(img_io)
+            img.width = 600
+            img.height = 300
+            ws.add_image(img, "D2") # Places the chart neatly next to the table
+
+    final_output = io.BytesIO()
+    wb.save(final_output)
+
     st.download_button(
-        label="📥 Download Complete Enterprise Multi-Sheet Package (.xlsx)",
-        data=excel_buffer.getvalue(),
-        file_name=f"Enterprise_Bank_Master_Package_{reporting_period}.xlsx",
+        label="📥 Download Complete Enterprise Multi-Sheet Package with Embedded Charts (.xlsx)",
+        data=final_output.getvalue(),
+        file_name=f"Enterprise_Bank_Master_Package_With_Charts_{reporting_period}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
