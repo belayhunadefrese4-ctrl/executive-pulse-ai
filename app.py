@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Ascending Least-Performance Branch Analytics</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Dynamic Visualizations</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -181,7 +181,7 @@ exec_summary_df.columns = [
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Executive Summary Table",
     "📑 Linked Detail Sheets", 
-    "🏆 Top & Least 10 Rankings",
+    "🏆 Top & Least 10 Rankings & Charts",
     "📄 Boardroom Report & PPT",
     "📥 Download Master Package"
 ])
@@ -211,10 +211,10 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
-    st.subheader("🏆 Branch Performance Analytics: Top 10 & Least 10 Rankings")
-    st.markdown("Automatically rank branches by **YTD Actual / %age** and **Monthly Actual / %age** (Least 10 sorted in **ascending order**).")
+    st.subheader("🏆 Branch Performance Analytics & Visualizations")
+    st.markdown("Automated ranking and dynamic visual comparisons for **Top 10** and **Least 10** branches.")
     
-    rank_sheet = st.selectbox("Select Variable Sheet for Branch Rankings:", list(sheets.keys()), key="rank_sheet")
+    rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
         rank_df = sheets[rank_sheet].copy()
         
@@ -231,6 +231,16 @@ with tab3:
         pct_cols = [c for c in rank_df.columns if "%age" in str(c) or "percent" in str(c).lower()]
         ytd_pct_col = pct_cols[0] if len(pct_cols) > 0 else None
         m_pct_col = pct_cols[1] if len(pct_cols) > 1 else (pct_cols[0] if len(pct_cols) > 0 else None)
+
+        # Identify Branch Name/Label column
+        branch_name_col = None
+        for col in rank_df.columns:
+            c_low = str(col).lower()
+            if any(k in c_low for k in ["branch name", "branch", "name", "district"]):
+                branch_name_col = col
+                break
+        if not branch_name_col and len(rank_df.columns) > 0:
+            branch_name_col = rank_df.columns[1] if len(rank_df.columns) > 1 else rank_df.columns[0]
 
         if ytd_act_col:
             rank_df["_sort_ytd_act"] = pd.to_numeric(rank_df[ytd_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
@@ -255,38 +265,60 @@ with tab3:
         col_t1, col_t2 = st.columns(2)
         
         with col_t1:
-            st.markdown("#### 🥇 YTD Performance Rankings")
+            st.markdown("#### 🥇 YTD Performance Rankings & Charts")
             sort_metric_ytd = st.radio("Rank YTD by:", ["YTD Actual Volume", "YTD % Achievement"], horizontal=True, key="sort_ytd_type")
             
             if sort_metric_ytd == "YTD Actual Volume":
                 sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
                 sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_act", ascending=True)
+                chart_col_ytd = "_sort_ytd_act"
             else:
                 sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
                 sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_pct", ascending=True)
+                chart_col_ytd = "_sort_ytd_pct"
 
-            st.markdown("##### Top 10 Branches (YTD - Descending)")
-            st.dataframe(sorted_ytd_top.drop(columns=[c for c in sorted_ytd_top.columns if c.startswith("_")]).head(10), use_container_width=True)
-            
+            top_10_ytd = sorted_ytd_top.head(10)
+            least_10_ytd = sorted_ytd_least.head(10)
+
+            st.markdown("##### Top 10 Branches (YTD)")
+            st.dataframe(top_10_ytd.drop(columns=[c for c in top_10_ytd.columns if c.startswith("_")]), use_container_width=True)
+            if branch_name_col in top_10_ytd.columns:
+                chart_data_top = top_10_ytd.set_index(branch_name_col)[chart_col_ytd]
+                st.bar_chart(chart_data_top, color="#800020")
+
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
-            st.dataframe(sorted_ytd_least.drop(columns=[c for c in sorted_ytd_least.columns if c.startswith("_")]).head(10), use_container_width=True)
+            st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
+            if branch_name_col in least_10_ytd.columns:
+                chart_data_least = least_10_ytd.set_index(branch_name_col)[chart_col_ytd]
+                st.bar_chart(chart_data_least, color="#475569")
 
         with col_t2:
-            st.markdown("#### 📅 Monthly (M. Actual) Performance Rankings")
+            st.markdown("#### 📅 Monthly Performance Rankings & Charts")
             sort_metric_m = st.radio("Rank Monthly by:", ["Monthly Actual Volume", "Monthly % Achievement"], horizontal=True, key="sort_m_type")
             
             if sort_metric_m == "Monthly Actual Volume":
                 sorted_m_top = rank_df.sort_values(by="_sort_m_act", ascending=False)
                 sorted_m_least = rank_df.sort_values(by="_sort_m_act", ascending=True)
+                chart_col_m = "_sort_m_act"
             else:
                 sorted_m_top = rank_df.sort_values(by="_sort_m_pct", ascending=False)
                 sorted_m_least = rank_df.sort_values(by="_sort_m_pct", ascending=True)
+                chart_col_m = "_sort_m_pct"
 
-            st.markdown("##### Top 10 Branches (Monthly - Descending)")
-            st.dataframe(sorted_m_top.drop(columns=[c for c in sorted_m_top.columns if c.startswith("_")]).head(10), use_container_width=True)
-            
+            top_10_m = sorted_m_top.head(10)
+            least_10_m = sorted_m_least.head(10)
+
+            st.markdown("##### Top 10 Branches (Monthly)")
+            st.dataframe(top_10_m.drop(columns=[c for c in top_10_m.columns if c.startswith("_")]), use_container_width=True)
+            if branch_name_col in top_10_m.columns:
+                chart_data_m_top = top_10_m.set_index(branch_name_col)[chart_col_m]
+                st.bar_chart(chart_data_m_top, color="#800020")
+
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
-            st.dataframe(sorted_m_least.drop(columns=[c for c in sorted_m_least.columns if c.startswith("_")]).head(10), use_container_width=True)
+            st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
+            if branch_name_col in least_10_m.columns:
+                chart_data_m_least = least_10_m.set_index(branch_name_col)[chart_col_m]
+                st.bar_chart(chart_data_m_least, color="#475569")
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -296,9 +328,9 @@ with tab4:
 COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. EXECUTIVE SUMMARY ROLL-UP MATRIX & BRANCH RANKINGS
+1. EXECUTIVE SUMMARY ROLL-UP MATRIX & VISUAL ANALYTICS
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with ascending Least 10 branch analytics.
+   • Master summary compiled successfully with Top/Least 10 branch rankings and charts.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -309,7 +341,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Tracking: Top 10 (Descending) & Least 10 (Ascending) branch rankings.
+- Comprehensive Branch Analytics: Top 10 & Least 10 visual comparisons.
 """
 
     col_r1, col_r2 = st.columns(2)
