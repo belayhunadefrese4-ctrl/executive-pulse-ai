@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Native Visualizations</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Labeled Visualizations</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -50,12 +50,12 @@ uploaded_files = st.sidebar.file_uploader(
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
 # ==========================================
-# 🎨 COLOR CUSTOMIZER WIDGET
+# 🎨 CHART COLOR CUSTOMIZER WIDGET
 # ==========================================
 st.sidebar.markdown("---")
 st.sidebar.header("🎨 Chart Color Customizer")
 plan_color = st.sidebar.color_picker("Plan Color (Default: Black)", "#111827")
-actual_color = st.sidebar.color_picker("Actual Color (Default: Ahadu Burgundy)", "#800020")
+actual_color = st.sidebar.color_picker("Actual Color (Default: Burgundy)", "#800020")
 
 # Helper to ensure unique column names
 def make_unique_cols(cols):
@@ -219,8 +219,8 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
-    st.subheader("🏆 Branch Performance Analytics & Native Visualizations")
-    st.markdown("Automated ranking and visual comparisons comparing **Plan vs Actual**.")
+    st.subheader("🏆 Branch Performance Analytics & Labeled Visualizations")
+    st.markdown(f"Comparing Plan (<span style='color:{plan_color}; font-weight:bold;'>■ Plan</span>) vs Actual (<span style='color:{actual_color}; font-weight:bold;'>■ Actual</span>) with data labels.", unsafe_allow_html=True)
     
     rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
@@ -282,6 +282,8 @@ with tab3:
                 chart_df = top_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
                 chart_df.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df)
+                # Display explicit weight/performance metrics summary below chart
+                st.caption(f"📊 Summary Weights — Total Plan Volume: {chart_df['Plan'].sum():,.0f} | Total Actual Volume: {chart_df['Actual'].sum():,.0f}")
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
             st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
@@ -290,6 +292,7 @@ with tab3:
                 chart_df_least = least_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
                 chart_df_least.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_least)
+                st.caption(f"📊 Summary Weights — Total Plan Volume: {chart_df_least['Plan'].sum():,.0f} | Total Actual Volume: {chart_df_least['Actual'].sum():,.0f}")
 
         with col_t2:
             st.markdown("#### 📅 Monthly Performance Rankings & Charts")
@@ -312,6 +315,7 @@ with tab3:
                 chart_df_m = top_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
                 chart_df_m.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_m)
+                st.caption(f"📊 Summary Weights — Monthly Plan: {chart_df_m['Plan'].sum():,.0f} | Monthly Actual: {chart_df_m['Actual'].sum():,.0f}")
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
             st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
@@ -320,6 +324,7 @@ with tab3:
                 chart_df_m_least = least_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
                 chart_df_m_least.columns = ["Plan", "Actual"]
                 st.bar_chart(chart_df_m_least)
+                st.caption(f"📊 Summary Weights — Monthly Plan: {chart_df_m_least['Plan'].sum():,.0f} | Monthly Actual: {chart_df_m_least['Actual'].sum():,.0f}")
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
