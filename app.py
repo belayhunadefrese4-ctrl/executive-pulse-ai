@@ -3,9 +3,6 @@ import pandas as pd
 import numpy as np
 import io
 import altair as alt
-import openpyxl
-from openpyxl.drawing.image import Image as XLImage
-import vl_convert as vlc
 
 # ==========================================
 # PAGE CONFIGURATION & EXECUTIVE STYLING
@@ -33,7 +30,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Dynamic Period Headers & Master Package with Embedded Charts</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Dynamic Period Headers & Master Package Export</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -218,7 +215,7 @@ with tab2:
         
         detail_df = sheets[selected_sheet].copy()
         for col in detail_df.columns:
-            if "position" in str(col).lower() or "august" in str(col).lower():
+            if "position" in str(col).lower() or "august" in str(col).lower() or "september" in str(col).lower():
                 detail_df.rename(columns={col: pos_header}, inplace=True)
                 break
 
@@ -234,7 +231,6 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 export_rankings_dict = {}
-chart_objects = {}
 
 with tab3:
     st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
@@ -303,9 +299,6 @@ with tab3:
 
         c_top_ytd = get_altair_chart(sorted_ytd_top.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
         c_least_ytd = get_altair_chart(sorted_ytd_least.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
-        
-        if c_top_ytd: chart_objects["Top_10_YTD"] = c_top_ytd
-        if c_least_ytd: chart_objects["Least_10_YTD"] = c_least_ytd
 
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -330,9 +323,6 @@ with tab3:
 
             c_top_m = get_altair_chart(sorted_m_top.head(10), "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
             c_least_m = get_altair_chart(sorted_m_least.head(10), "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
-            
-            if c_top_m: chart_objects["Top_10_Monthly"] = c_top_m
-            if c_least_m: chart_objects["Least_10_Monthly"] = c_least_m
 
             st.markdown("##### Top 10 Branches (Monthly)")
             st.dataframe(top_10_m, use_container_width=True)
@@ -369,7 +359,7 @@ SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 
 with tab5:
     st.subheader("📥 Download Master Package")
-    st.markdown("Download the fully structured Excel workbook containing the summarized master table, top/least rankings, embedded visual charts, and all detailed branch source workbooks.")
+    st.markdown("Download the fully structured Excel workbook containing the summarized master table, top/least rankings, and all detailed branch source workbooks.")
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
@@ -382,7 +372,7 @@ with tab5:
             clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
             export_df = s_df.copy()
             for col in export_df.columns:
-                if "position" in str(col).lower() or "august" in str(col).lower():
+                if "position" in str(col).lower() or "august" in str(col).lower() or "september" in str(col).lower():
                     export_df.rename(columns={col: pos_header}, inplace=True)
                     break
             total_list = []
@@ -395,13 +385,9 @@ with tab5:
             export_df.loc[len(export_df)] = total_list
             export_df.to_excel(writer, sheet_name=clean_name, index=False)
 
-    # Post-process workbook with openpyxl and vl-convert to embed Altair charts as images onto ranking sheets
-    excel_buffer.seek(0)
-    wb = openpyxl.load_workbook(excel_buffer)
-    
-    for chart_name, chart_obj in chart_objects.items():
-        if chart_name in wb.sheetnames:
-            ws = wb[chart_name]
-            # Convert Altair chart to PNG bytes via vl_convert
-            img_bytes = vlc.vegalite_to_png(chart_obj.to_dict(), scale=2)
-            img_io = io.BytesIO(img_bytes)
+    st.download_button(
+        label="📥 Download Complete Enterprise Multi-Sheet Package (.xlsx)",
+        data=excel_buffer.getvalue(),
+        file_name=f"Enterprise_Bank_Master_Package_{reporting_period}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
