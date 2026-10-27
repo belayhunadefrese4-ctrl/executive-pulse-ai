@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ==========================================
 # PAGE CONFIGURATION & EXECUTIVE STYLING
@@ -38,7 +40,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Dynamic Visualizations</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Branch Analytics & Custom Visualizations</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -48,6 +50,14 @@ uploaded_files = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
+
+# ==========================================
+# 🎨 CHART COLOR & BRANDING EDITING TAB (SIDEBAR)
+# ==========================================
+st.sidebar.markdown("---")
+st.sidebar.header("🎨 Chart Color Customizer")
+plan_color = st.sidebar.color_picker("Plan Color (Default: Black)", "#111827")
+actual_color = st.sidebar.color_picker("Actual Color (Default: Ahadu Burgundy)", "#800020")
 
 # Helper to ensure unique column names
 def make_unique_cols(cols):
@@ -211,8 +221,8 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
-    st.subheader("🏆 Branch Performance Analytics & Visualizations")
-    st.markdown("Automated ranking and dynamic visual comparisons for **Top 10** and **Least 10** branches.")
+    st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
+    st.markdown("Automated ranking and dynamic Plotly visual comparisons comparing **Plan vs Actual**.")
     
     rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
@@ -225,14 +235,15 @@ with tab3:
                     return col
             return None
 
+        ytd_plan_col = find_col_by_keywords(rank_df, ["ytd. plan", "ytd plan"])
         ytd_act_col = find_col_by_keywords(rank_df, ["ytd. actual", "ytd actual", "ytd.act"])
+        m_plan_col = find_col_by_keywords(rank_df, ["m.plan", "month plan", "m plan"])
         m_act_col = find_col_by_keywords(rank_df, ["m. actual", "m actual", "month actual"])
         
         pct_cols = [c for c in rank_df.columns if "%age" in str(c) or "percent" in str(c).lower()]
         ytd_pct_col = pct_cols[0] if len(pct_cols) > 0 else None
         m_pct_col = pct_cols[1] if len(pct_cols) > 1 else (pct_cols[0] if len(pct_cols) > 0 else None)
 
-        # Identify Branch Name/Label column
         branch_name_col = None
         for col in rank_df.columns:
             c_low = str(col).lower()
@@ -242,83 +253,93 @@ with tab3:
         if not branch_name_col and len(rank_df.columns) > 0:
             branch_name_col = rank_df.columns[1] if len(rank_df.columns) > 1 else rank_df.columns[0]
 
-        if ytd_act_col:
-            rank_df["_sort_ytd_act"] = pd.to_numeric(rank_df[ytd_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-        else:
-            rank_df["_sort_ytd_act"] = 0.0
+        # Numeric conversions for sorting and plotting
+        rank_df["_sort_ytd_act"] = pd.to_numeric(rank_df[ytd_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if ytd_act_col else 0.0
+        rank_df["_sort_ytd_plan"] = pd.to_numeric(rank_df[ytd_plan_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if ytd_plan_col else 0.0
+        rank_df["_sort_m_act"] = pd.to_numeric(rank_df[m_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if m_act_col else 0.0
+        rank_df["_sort_m_plan"] = pd.to_numeric(rank_df[m_plan_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if m_plan_col else 0.0
 
-        if m_act_col:
-            rank_df["_sort_m_act"] = pd.to_numeric(rank_df[m_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-        else:
-            rank_df["_sort_m_act"] = 0.0
-
-        if ytd_pct_col:
-            rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-        else:
-            rank_df["_sort_ytd_pct"] = rank_df["_sort_ytd_act"]
-
-        if m_pct_col:
-            rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-        else:
-            rank_df["_sort_m_pct"] = rank_df["_sort_m_act"]
+        rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if ytd_pct_col else rank_df["_sort_ytd_act"]
+        rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if m_pct_col else rank_df["_sort_m_act"]
 
         col_t1, col_t2 = st.columns(2)
         
         with col_t1:
-            st.markdown("#### 🥇 YTD Performance Rankings & Charts")
+            st.markdown("#### 🥇 YTD Performance Rankings & Grouped Bar Charts")
             sort_metric_ytd = st.radio("Rank YTD by:", ["YTD Actual Volume", "YTD % Achievement"], horizontal=True, key="sort_ytd_type")
             
             if sort_metric_ytd == "YTD Actual Volume":
                 sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
                 sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_act", ascending=True)
-                chart_col_ytd = "_sort_ytd_act"
+                chart_metric_label = "YTD Volume"
             else:
                 sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
                 sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_pct", ascending=True)
-                chart_col_ytd = "_sort_ytd_pct"
+                chart_metric_label = "YTD % Achievement"
 
             top_10_ytd = sorted_ytd_top.head(10)
             least_10_ytd = sorted_ytd_least.head(10)
 
             st.markdown("##### Top 10 Branches (YTD)")
             st.dataframe(top_10_ytd.drop(columns=[c for c in top_10_ytd.columns if c.startswith("_")]), use_container_width=True)
+            
+            # Plotly Grouped Bar Chart for Top 10 YTD (Plan vs Actual)
             if branch_name_col in top_10_ytd.columns:
-                chart_data_top = top_10_ytd.set_index(branch_name_col)[chart_col_ytd]
-                st.bar_chart(chart_data_top, color="#800020")
+                fig_top_ytd = go.Figure(data=[
+                    go.Bar(name='Plan', x=top_10_ytd[branch_name_col], y=top_10_ytd["_sort_ytd_plan"], marker_color=plan_color),
+                    go.Bar(name='Actual', x=top_10_ytd[branch_name_col], y=top_10_ytd["_sort_ytd_act"], marker_color=actual_color)
+                ])
+                fig_top_ytd.update_layout(barmode='group', title=f"Top 10 Branches - YTD Plan vs Actual ({chart_metric_label})", xaxis_title="Branch", yaxis_title="Amount")
+                st.plotly_chart(fig_top_ytd, use_container_width=True)
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
             st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
+            
             if branch_name_col in least_10_ytd.columns:
-                chart_data_least = least_10_ytd.set_index(branch_name_col)[chart_col_ytd]
-                st.bar_chart(chart_data_least, color="#475569")
+                fig_least_ytd = go.Figure(data=[
+                    go.Bar(name='Plan', x=least_10_ytd[branch_name_col], y=least_10_ytd["_sort_ytd_plan"], marker_color=plan_color),
+                    go.Bar(name='Actual', x=least_10_ytd[branch_name_col], y=least_10_ytd["_sort_ytd_act"], marker_color=actual_color)
+                ])
+                fig_least_ytd.update_layout(barmode='group', title=f"Least 10 Branches - YTD Plan vs Actual ({chart_metric_label})", xaxis_title="Branch", yaxis_title="Amount")
+                st.plotly_chart(fig_least_ytd, use_container_width=True)
 
         with col_t2:
-            st.markdown("#### 📅 Monthly Performance Rankings & Charts")
+            st.markdown("#### 📅 Monthly Performance Rankings & Grouped Bar Charts")
             sort_metric_m = st.radio("Rank Monthly by:", ["Monthly Actual Volume", "Monthly % Achievement"], horizontal=True, key="sort_m_type")
             
             if sort_metric_m == "Monthly Actual Volume":
                 sorted_m_top = rank_df.sort_values(by="_sort_m_act", ascending=False)
                 sorted_m_least = rank_df.sort_values(by="_sort_m_act", ascending=True)
-                chart_col_m = "_sort_m_act"
+                chart_m_label = "Monthly Volume"
             else:
                 sorted_m_top = rank_df.sort_values(by="_sort_m_pct", ascending=False)
                 sorted_m_least = rank_df.sort_values(by="_sort_m_pct", ascending=True)
-                chart_col_m = "_sort_m_pct"
+                chart_m_label = "Monthly % Achievement"
 
             top_10_m = sorted_m_top.head(10)
             least_10_m = sorted_m_least.head(10)
 
             st.markdown("##### Top 10 Branches (Monthly)")
             st.dataframe(top_10_m.drop(columns=[c for c in top_10_m.columns if c.startswith("_")]), use_container_width=True)
+            
             if branch_name_col in top_10_m.columns:
-                chart_data_m_top = top_10_m.set_index(branch_name_col)[chart_col_m]
-                st.bar_chart(chart_data_m_top, color="#800020")
+                fig_top_m = go.Figure(data=[
+                    go.Bar(name='Plan', x=top_10_m[branch_name_col], y=top_10_m["_sort_m_plan"], marker_color=plan_color),
+                    go.Bar(name='Actual', x=top_10_m[branch_name_col], y=top_10_m["_sort_m_act"], marker_color=actual_color)
+                ])
+                fig_top_m.update_layout(barmode='group', title=f"Top 10 Branches - Monthly Plan vs Actual ({chart_m_label})", xaxis_title="Branch", yaxis_title="Amount")
+                st.plotly_chart(fig_top_m, use_container_width=True)
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
             st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
+            
             if branch_name_col in least_10_m.columns:
-                chart_data_m_least = least_10_m.set_index(branch_name_col)[chart_col_m]
-                st.bar_chart(chart_data_m_least, color="#475569")
+                fig_least_m = go.Figure(data=[
+                    go.Bar(name='Plan', x=least_10_m[branch_name_col], y=least_10_m["_sort_m_plan"], marker_color=plan_color),
+                    go.Bar(name='Actual', x=least_10_m[branch_name_col], y=least_10_m["_sort_m_act"], marker_color=actual_color)
+                ])
+                fig_least_m.update_layout(barmode='group', title=f"Least 10 Branches - Monthly Plan vs Actual ({chart_m_label})", xaxis_title="Branch", yaxis_title="Amount")
+                st.plotly_chart(fig_least_m, use_container_width=True)
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -330,7 +351,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX & VISUAL ANALYTICS
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with Top/Least 10 branch rankings and charts.
+   • Master summary compiled successfully with branded Plotly visual charts.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -341,7 +362,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Branch Analytics: Top 10 & Least 10 visual comparisons.
+- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Grouped Bar Charts.
 """
 
     col_r1, col_r2 = st.columns(2)
