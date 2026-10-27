@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Detail Workbooks & Branch Ranking Analytics</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Ascending Least-Performance Branch Analytics</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -212,13 +212,12 @@ with tab2:
 
 with tab3:
     st.subheader("🏆 Branch Performance Analytics: Top 10 & Least 10 Rankings")
-    st.markdown("Automatically rank branches by **YTD Actual / %age** and **Monthly Actual / %age**.")
+    st.markdown("Automatically rank branches by **YTD Actual / %age** and **Monthly Actual / %age** (Least 10 sorted in **ascending order**).")
     
     rank_sheet = st.selectbox("Select Variable Sheet for Branch Rankings:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
         rank_df = sheets[rank_sheet].copy()
         
-        # Identify numeric ranking columns dynamically
         def find_col_by_keywords(df, keywords):
             for col in df.columns:
                 c_low = str(col).lower()
@@ -229,7 +228,6 @@ with tab3:
         ytd_act_col = find_col_by_keywords(rank_df, ["ytd. actual", "ytd actual", "ytd.act"])
         m_act_col = find_col_by_keywords(rank_df, ["m. actual", "m actual", "month actual"])
         
-        # Find %age columns
         pct_cols = [c for c in rank_df.columns if "%age" in str(c) or "percent" in str(c).lower()]
         ytd_pct_col = pct_cols[0] if len(pct_cols) > 0 else None
         m_pct_col = pct_cols[1] if len(pct_cols) > 1 else (pct_cols[0] if len(pct_cols) > 0 else None)
@@ -244,6 +242,16 @@ with tab3:
         else:
             rank_df["_sort_m_act"] = 0.0
 
+        if ytd_pct_col:
+            rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+        else:
+            rank_df["_sort_ytd_pct"] = rank_df["_sort_ytd_act"]
+
+        if m_pct_col:
+            rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+        else:
+            rank_df["_sort_m_pct"] = rank_df["_sort_m_act"]
+
         col_t1, col_t2 = st.columns(2)
         
         with col_t1:
@@ -251,38 +259,34 @@ with tab3:
             sort_metric_ytd = st.radio("Rank YTD by:", ["YTD Actual Volume", "YTD % Achievement"], horizontal=True, key="sort_ytd_type")
             
             if sort_metric_ytd == "YTD Actual Volume":
-                sorted_ytd = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+                sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+                sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_act", ascending=True)
             else:
-                if ytd_pct_col:
-                    rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-                    sorted_ytd = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
-                else:
-                    sorted_ytd = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+                sorted_ytd_top = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
+                sorted_ytd_least = rank_df.sort_values(by="_sort_ytd_pct", ascending=True)
 
-            st.markdown("##### Top 10 Branches (YTD)")
-            st.dataframe(sorted_ytd.drop(columns=[c for c in sorted_ytd.columns if c.startswith("_")]).head(10), use_container_width=True)
+            st.markdown("##### Top 10 Branches (YTD - Descending)")
+            st.dataframe(sorted_ytd_top.drop(columns=[c for c in sorted_ytd_top.columns if c.startswith("_")]).head(10), use_container_width=True)
             
-            st.markdown("##### Least 10 Branches (YTD)")
-            st.dataframe(sorted_ytd.drop(columns=[c for c in sorted_ytd.columns if c.startswith("_")]).tail(10), use_container_width=True)
+            st.markdown("##### Least 10 Branches (YTD - Ascending)")
+            st.dataframe(sorted_ytd_least.drop(columns=[c for c in sorted_ytd_least.columns if c.startswith("_")]).head(10), use_container_width=True)
 
         with col_t2:
             st.markdown("#### 📅 Monthly (M. Actual) Performance Rankings")
             sort_metric_m = st.radio("Rank Monthly by:", ["Monthly Actual Volume", "Monthly % Achievement"], horizontal=True, key="sort_m_type")
             
             if sort_metric_m == "Monthly Actual Volume":
-                sorted_m = rank_df.sort_values(by="_sort_m_act", ascending=False)
+                sorted_m_top = rank_df.sort_values(by="_sort_m_act", ascending=False)
+                sorted_m_least = rank_df.sort_values(by="_sort_m_act", ascending=True)
             else:
-                if m_pct_col:
-                    rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
-                    sorted_m = rank_df.sort_values(by="_sort_m_pct", ascending=False)
-                else:
-                    sorted_m = rank_df.sort_values(by="_sort_m_act", ascending=False)
+                sorted_m_top = rank_df.sort_values(by="_sort_m_pct", ascending=False)
+                sorted_m_least = rank_df.sort_values(by="_sort_m_pct", ascending=True)
 
-            st.markdown("##### Top 10 Branches (Monthly)")
-            st.dataframe(sorted_m.drop(columns=[c for c in sorted_m.columns if c.startswith("_")]).head(10), use_container_width=True)
+            st.markdown("##### Top 10 Branches (Monthly - Descending)")
+            st.dataframe(sorted_m_top.drop(columns=[c for c in sorted_m_top.columns if c.startswith("_")]).head(10), use_container_width=True)
             
-            st.markdown("##### Least 10 Branches (Monthly)")
-            st.dataframe(sorted_m.drop(columns=[c for c in sorted_m.columns if c.startswith("_")]).tail(10), use_container_width=True)
+            st.markdown("##### Least 10 Branches (Monthly - Ascending)")
+            st.dataframe(sorted_m_least.drop(columns=[c for c in sorted_m_least.columns if c.startswith("_")]).head(10), use_container_width=True)
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -294,7 +298,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX & BRANCH RANKINGS
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with automated Top & Least 10 branch analytics.
+   • Master summary compiled successfully with ascending Least 10 branch analytics.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -305,7 +309,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Tracking: Top/Least 10 branch rankings by YTD and Monthly metrics.
+- Comprehensive Tracking: Top 10 (Descending) & Least 10 (Ascending) branch rankings.
 """
 
     col_r1, col_r2 = st.columns(2)
