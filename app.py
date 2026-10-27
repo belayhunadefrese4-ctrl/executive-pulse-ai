@@ -5,6 +5,7 @@ import io
 import altair as alt
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
+import vl_convert as vlc
 
 # ==========================================
 # PAGE CONFIGURATION & EXECUTIVE STYLING
@@ -303,8 +304,8 @@ with tab3:
         c_top_ytd = get_altair_chart(sorted_ytd_top.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
         c_least_ytd = get_altair_chart(sorted_ytd_least.head(10), "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
         
-        if c_top_ytd: chart_objects["Top_10_YTD_Chart"] = c_top_ytd
-        if c_least_ytd: chart_objects["Least_10_YTD_Chart"] = c_least_ytd
+        if c_top_ytd: chart_objects["Top_10_YTD"] = c_top_ytd
+        if c_least_ytd: chart_objects["Least_10_YTD"] = c_least_ytd
 
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -330,8 +331,8 @@ with tab3:
             c_top_m = get_altair_chart(sorted_m_top.head(10), "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
             c_least_m = get_altair_chart(sorted_m_least.head(10), "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
             
-            if c_top_m: chart_objects["Top_10_Monthly_Chart"] = c_top_m
-            if c_least_m: chart_objects["Least_10_Monthly_Chart"] = c_least_m
+            if c_top_m: chart_objects["Top_10_Monthly"] = c_top_m
+            if c_least_m: chart_objects["Least_10_Monthly"] = c_least_m
 
             st.markdown("##### Top 10 Branches (Monthly)")
             st.dataframe(top_10_m, use_container_width=True)
@@ -394,26 +395,13 @@ with tab5:
             export_df.loc[len(export_df)] = total_list
             export_df.to_excel(writer, sheet_name=clean_name, index=False)
 
-    # Post-process workbook with openpyxl to embed charts as images onto ranking sheets
+    # Post-process workbook with openpyxl and vl-convert to embed Altair charts as images onto ranking sheets
     excel_buffer.seek(0)
     wb = openpyxl.load_workbook(excel_buffer)
     
     for chart_name, chart_obj in chart_objects.items():
         if chart_name in wb.sheetnames:
             ws = wb[chart_name]
-            img_bytes = chart_obj.to_image(format='png')
+            # Convert Altair chart to PNG bytes via vl_convert
+            img_bytes = vlc.vegalite_to_png(chart_obj.to_dict(), scale=2)
             img_io = io.BytesIO(img_bytes)
-            img = XLImage(img_io)
-            img.width = 600
-            img.height = 300
-            ws.add_image(img, "D2") # Places the chart neatly next to the table
-
-    final_output = io.BytesIO()
-    wb.save(final_output)
-
-    st.download_button(
-        label="📥 Download Complete Enterprise Multi-Sheet Package with Embedded Charts (.xlsx)",
-        data=final_output.getvalue(),
-        file_name=f"Enterprise_Bank_Master_Package_With_Charts_{reporting_period}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
