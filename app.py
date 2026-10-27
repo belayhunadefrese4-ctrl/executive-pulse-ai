@@ -38,7 +38,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p class="main-header">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Multi-Sheet Roll-up & Unique Column Sanitization Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Multi-Sheet Roll-up, Detail Workbooks & Branch Ranking Analytics</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -49,7 +49,7 @@ uploaded_files = st.sidebar.file_uploader(
 )
 reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
 
-# Helper to ensure unique column names (prevents Arrow/Streamlit duplicate column crashes)
+# Helper to ensure unique column names
 def make_unique_cols(cols):
     seen = {}
     new_cols = []
@@ -107,7 +107,7 @@ if not sheets:
     st.stop()
 
 # ==========================================
-# 2. FLEXIBLE COLUMN MAPPING & ROLL-UP
+# 2. COLUMN MAPPING & ROLL-UP ENGINE
 # ==========================================
 def clean_sum_by_keywords(df, possible_keywords):
     for col in df.columns:
@@ -178,9 +178,10 @@ exec_summary_df.columns = [
 # ==========================================
 # 3. EXECUTIVE DASHBOARD TABS
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Executive Summary Table",
     "📑 Linked Detail Sheets", 
+    "🏆 Top & Least 10 Rankings",
     "📄 Boardroom Report & PPT",
     "📥 Download Master Package"
 ])
@@ -192,13 +193,12 @@ with tab1:
 
 with tab2:
     st.subheader("📑 Detailed Source Workbooks & Domain Inspector")
-    selected_sheet = st.selectbox("Select Variable Sheet to Inspect Details:", list(sheets.keys()))
+    selected_sheet = st.selectbox("Select Variable Sheet to Inspect Details:", list(sheets.keys()), key="det_sheet")
     if selected_sheet in sheets:
         st.markdown(f"**Showing full branch breakdown and automated Grand Total for `{selected_sheet}`:**")
         
         detail_df = sheets[selected_sheet].copy()
         
-        # Build safe positional total row for detail view
         total_list = []
         for i, c in enumerate(detail_df.columns):
             if i == 0:
@@ -211,6 +211,80 @@ with tab2:
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
 with tab3:
+    st.subheader("🏆 Branch Performance Analytics: Top 10 & Least 10 Rankings")
+    st.markdown("Automatically rank branches by **YTD Actual / %age** and **Monthly Actual / %age**.")
+    
+    rank_sheet = st.selectbox("Select Variable Sheet for Branch Rankings:", list(sheets.keys()), key="rank_sheet")
+    if rank_sheet in sheets:
+        rank_df = sheets[rank_sheet].copy()
+        
+        # Identify numeric ranking columns dynamically
+        def find_col_by_keywords(df, keywords):
+            for col in df.columns:
+                c_low = str(col).lower()
+                if any(k in c_low for k in keywords):
+                    return col
+            return None
+
+        ytd_act_col = find_col_by_keywords(rank_df, ["ytd. actual", "ytd actual", "ytd.act"])
+        m_act_col = find_col_by_keywords(rank_df, ["m. actual", "m actual", "month actual"])
+        
+        # Find %age columns
+        pct_cols = [c for c in rank_df.columns if "%age" in str(c) or "percent" in str(c).lower()]
+        ytd_pct_col = pct_cols[0] if len(pct_cols) > 0 else None
+        m_pct_col = pct_cols[1] if len(pct_cols) > 1 else (pct_cols[0] if len(pct_cols) > 0 else None)
+
+        if ytd_act_col:
+            rank_df["_sort_ytd_act"] = pd.to_numeric(rank_df[ytd_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+        else:
+            rank_df["_sort_ytd_act"] = 0.0
+
+        if m_act_col:
+            rank_df["_sort_m_act"] = pd.to_numeric(rank_df[m_act_col].astype(str).str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+        else:
+            rank_df["_sort_m_act"] = 0.0
+
+        col_t1, col_t2 = st.columns(2)
+        
+        with col_t1:
+            st.markdown("#### 🥇 YTD Performance Rankings")
+            sort_metric_ytd = st.radio("Rank YTD by:", ["YTD Actual Volume", "YTD % Achievement"], horizontal=True, key="sort_ytd_type")
+            
+            if sort_metric_ytd == "YTD Actual Volume":
+                sorted_ytd = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+            else:
+                if ytd_pct_col:
+                    rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+                    sorted_ytd = rank_df.sort_values(by="_sort_ytd_pct", ascending=False)
+                else:
+                    sorted_ytd = rank_df.sort_values(by="_sort_ytd_act", ascending=False)
+
+            st.markdown("##### Top 10 Branches (YTD)")
+            st.dataframe(sorted_ytd.drop(columns=[c for c in sorted_ytd.columns if c.startswith("_")]).head(10), use_container_width=True)
+            
+            st.markdown("##### Least 10 Branches (YTD)")
+            st.dataframe(sorted_ytd.drop(columns=[c for c in sorted_ytd.columns if c.startswith("_")]).tail(10), use_container_width=True)
+
+        with col_t2:
+            st.markdown("#### 📅 Monthly (M. Actual) Performance Rankings")
+            sort_metric_m = st.radio("Rank Monthly by:", ["Monthly Actual Volume", "Monthly % Achievement"], horizontal=True, key="sort_m_type")
+            
+            if sort_metric_m == "Monthly Actual Volume":
+                sorted_m = rank_df.sort_values(by="_sort_m_act", ascending=False)
+            else:
+                if m_pct_col:
+                    rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0)
+                    sorted_m = rank_df.sort_values(by="_sort_m_pct", ascending=False)
+                else:
+                    sorted_m = rank_df.sort_values(by="_sort_m_act", ascending=False)
+
+            st.markdown("##### Top 10 Branches (Monthly)")
+            st.dataframe(sorted_m.drop(columns=[c for c in sorted_m.columns if c.startswith("_")]).head(10), use_container_width=True)
+            
+            st.markdown("##### Least 10 Branches (Monthly)")
+            st.dataframe(sorted_m.drop(columns=[c for c in sorted_m.columns if c.startswith("_")]).tail(10), use_container_width=True)
+
+with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
     
     narrative_text = f"""
@@ -218,9 +292,9 @@ with tab3:
 COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 ====================================================================================
 
-1. EXECUTIVE SUMMARY ROLL-UP MATRIX
+1. EXECUTIVE SUMMARY ROLL-UP MATRIX & BRANCH RANKINGS
    ---------------------------------------------------------------------------------
-   • Master summary compiled successfully with unique column sanitization.
+   • Master summary compiled successfully with automated Top & Least 10 branch analytics.
    • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
 
 ====================================================================================
@@ -231,7 +305,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Tracking: June Position, YTD Plan vs Actual, Monthly Plan vs Actual.
+- Comprehensive Tracking: Top/Least 10 branch rankings by YTD and Monthly metrics.
 """
 
     col_r1, col_r2 = st.columns(2)
@@ -242,7 +316,7 @@ SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
         st.markdown("##### 📊 Boardroom PPT Slide Outline")
         st.markdown(f'<div class="ppt-box"><pre>{ppt_outline}</pre></div>', unsafe_allow_html=True)
 
-with tab4:
+with tab5:
     st.subheader("📥 Download Master Package")
     st.markdown("Download the fully structured Excel workbook containing the summarized master table as the first sheet.")
 
