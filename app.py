@@ -30,7 +30,7 @@ if user_key != MASTER_SECURITY_KEY:
 # APP HEADER & INGESTION HUB
 # ==========================================
 st.markdown('<p style="font-size: 2.2rem; font-weight: 800; color: #800020;">🏦 Executive Pulse AI: Enterprise Banking Intelligence</p>', unsafe_allow_html=True)
-st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Branch Analytics & Comprehensive Master Package Export</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-size: 1.05rem; color: #334155; margin-bottom: 20px;">Multi-Sheet Roll-up, Dynamic Period Headers & Master Package Export</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 st.sidebar.header("📥 Enterprise Data Ingestion")
@@ -39,7 +39,15 @@ uploaded_files = st.sidebar.file_uploader(
     type=["xlsx", "csv"], 
     accept_multiple_files=True
 )
-reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
+reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "September 2026", "Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Annual 2026"])
+
+# Dynamically derive date strings based on selected reporting period
+if "August" in reporting_period:
+    pos_header = "Position As of August 31, 2026"
+elif "September" in reporting_period:
+    pos_header = "Position As of September 30, 2026"
+else:
+    pos_header = f"Position As of {reporting_period}"
 
 # ==========================================
 # 🎨 CHART & BRAND COLOR CUSTOMIZER WIDGET
@@ -157,8 +165,8 @@ for idx, (s_key, df) in enumerate(sheets.items()):
         if len(num_cols) > 3: s_m_plan = clean_sum_by_keywords(df, [str(num_cols[3])])
         if len(num_cols) > 4: s_m_act = clean_sum_by_keywords(df, [str(num_cols[4])])
 
-    # Mandatory Banking Calculation Rule: Position As of August 31 = June 30 Position + YTD Actual
-    position_august = s_june + s_ytd_act
+    # Mandatory Banking Calculation Rule: Position = June 30 Position + YTD Actual
+    position_total = s_june + s_ytd_act
     ytd_pct = (s_ytd_act / s_ytd_plan * 100) if s_ytd_plan > 0 else 0.0
     m_pct = (s_m_act / s_m_plan * 100) if s_m_plan > 0 else 0.0
 
@@ -174,7 +182,7 @@ for idx, (s_key, df) in enumerate(sheets.items()):
         "M.Plan": f"{s_m_plan:,.0f}",
         "M. Actual": f"{s_m_act:,.0f}",
         "%age.1": f"{m_pct:.1f}%",
-        "Position As of August 31, 2026": f"{position_august:,.0f}"
+        pos_header: f"{position_total:,.0f}"
     })
 
 exec_summary_df = pd.DataFrame(summary_rows)
@@ -182,7 +190,7 @@ exec_summary_df.columns = [
     "#", "Particulars / variables", "As of June 30, 2026", 
     "YTD. Plan", "YTD. Actual", "%age", 
     "M.Plan", "M. Actual", "%age ", 
-    "Position As of August 31, 2026"
+    pos_header
 ]
 
 # ==========================================
@@ -209,6 +217,12 @@ with tab2:
         
         detail_df = sheets[selected_sheet].copy()
         
+        # Dynamically update the position header in the detail view if present
+        for col in detail_df.columns:
+            if "position" in str(col).lower() or "august" in str(col).lower():
+                detail_df.rename(columns={col: pos_header}, inplace=True)
+                break
+
         total_list = []
         for i, c in enumerate(detail_df.columns):
             if i == 0:
@@ -220,7 +234,6 @@ with tab2:
         detail_df.loc[len(detail_df)] = total_list
         st.data_editor(detail_df, num_rows="dynamic", use_container_width=True, key=f"insp_{selected_sheet}")
 
-# Global containers for rankings to use in export package
 export_rankings_dict = {}
 
 with tab3:
@@ -269,7 +282,6 @@ with tab3:
         top_10_ytd = sorted_ytd_top.head(10).drop(columns=[c for c in sorted_ytd_top.columns if c.startswith("_")])
         least_10_ytd = sorted_ytd_least.head(10).drop(columns=[c for c in sorted_ytd_least.columns if c.startswith("_")])
 
-        # Store for export
         export_rankings_dict["Top_10_YTD"] = top_10_ytd
         export_rankings_dict["Least_10_YTD"] = least_10_ytd
 
@@ -326,7 +338,7 @@ COMMERCIAL BANKING PERFORMANCE REPORT | PERIOD: {reporting_period}
 ====================================================================================
 1. EXECUTIVE SUMMARY ROLL-UP MATRIX & VISUAL ANALYTICS
    • Master summary compiled successfully with Top/Least 10 branch rankings and charts.
-   • Position As of August 31, 2026 computed precisely as June 30 Position + YTD Actual.
+   • {pos_header} computed precisely as June 30 Position + YTD Actual.
 ====================================================================================
 CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
 ====================================================================================
@@ -349,17 +361,18 @@ with tab5:
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        # Sheet 1: Master Summary Roll-up
         exec_summary_df.to_excel(writer, sheet_name="Executive_Summary", index=False)
         
-        # Sheet 2-5: Top & Least Rankings (if generated)
         for r_name, r_df in export_rankings_dict.items():
             r_df.to_excel(writer, sheet_name=r_name[:30], index=False)
 
-        # Sheets onwards: All Individual Detail Workbooks with Grand Totals
         for s_name, s_df in sheets.items():
             clean_name = str(s_name).replace(" -> ", "_")[:30].replace("/", "_").replace("\\", "_")
             export_df = s_df.copy()
+            for col in export_df.columns:
+                if "position" in str(col).lower() or "august" in str(col).lower():
+                    export_df.rename(columns={col: pos_header}, inplace=True)
+                    break
             total_list = []
             for i, c in enumerate(export_df.columns):
                 if i == 0:
