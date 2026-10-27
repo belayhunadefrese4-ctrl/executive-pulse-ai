@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import altair as alt
 
 # ==========================================
 # PAGE CONFIGURATION & EXECUTIVE STYLING
@@ -45,10 +46,10 @@ reporting_period = st.sidebar.selectbox("Reporting Period", ["August 2026", "Q4 
 # ==========================================
 st.sidebar.markdown("---")
 st.sidebar.header("🎨 Chart & Brand Color Customizer")
-plan_color = st.sidebar.color_picker("Plan Color (Default: Black)", "#111827")
-actual_color = st.sidebar.color_picker("Actual Color (Default: Burgundy)", "#800020")
+plan_color = st.sidebar.color_picker("Plan Color", "#111827")
+actual_color = st.sidebar.color_picker("Actual Color", "#800020")
 
-# Inject dynamic custom CSS for legend badges and custom colors
+# Inject dynamic custom CSS for legend badges
 st.markdown(f"""
     <style>
     .plan-badge {{ background-color: {plan_color}; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; display: inline-block; }}
@@ -221,7 +222,7 @@ with tab2:
 
 with tab3:
     st.subheader("🏆 Branch Performance Analytics & Branded Visualizations")
-    st.markdown(f"Active Legend & Custom Palette: <span class='plan-badge'>Plan (Custom Color)</span> &nbsp;&nbsp;&nbsp; <span class='actual-badge'>Actual (Custom Burgundy)</span>", unsafe_allow_html=True)
+    st.markdown(f"Active Legend: <span class='plan-badge'>Plan</span> &nbsp;&nbsp;&nbsp; <span class='actual-badge'>Actual</span> (Colors dynamically reflect your sidebar pickers).", unsafe_allow_html=True)
     
     rank_sheet = st.selectbox("Select Variable Sheet for Analytics:", list(sheets.keys()), key="rank_sheet")
     if rank_sheet in sheets:
@@ -260,6 +261,25 @@ with tab3:
         rank_df["_sort_ytd_pct"] = pd.to_numeric(rank_df[ytd_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if ytd_pct_col else rank_df["_sort_ytd_act"]
         rank_df["_sort_m_pct"] = pd.to_numeric(rank_df[m_pct_col].astype(str).str.replace('%', '').str.replace(',', '').str.replace('-', '0'), errors='coerce').fillna(0) if m_pct_col else rank_df["_sort_m_act"]
 
+        # Helper function to render customized Altair colored charts
+        def render_custom_altair_chart(df_subset, p_col, a_col, chart_title):
+            if branch_name_col not in df_subset.columns:
+                return
+            
+            plot_df = df_subset.set_index(branch_name_col)[[p_col, a_col]].reset_index()
+            plot_df.columns = ["Branch", "Plan", "Actual"]
+            melted = plot_df.melt(id_vars="Branch", value_vars=["Plan", "Actual"], var_name="Metric", value_name="Amount")
+            
+            chart = alt.Chart(melted).mark_bar().encode(
+                x=alt.X('Branch:N', sort=None, title=''),
+                y=alt.Y('Amount:Q', title=''),
+                color=alt.Color('Metric:N', scale=alt.Scale(domain=['Plan', 'Actual'], range=[plan_color, actual_color]), legend=alt.Legend(title="")),
+                xOffset='Metric:N',
+                tooltip=['Branch', 'Metric', 'Amount']
+            ).properties(title=chart_title, height=300).configure_view(stroke=None)
+            
+            st.altair_chart(chart, use_container_width=True)
+
         col_t1, col_t2 = st.columns(2)
         
         with col_t1:
@@ -278,31 +298,11 @@ with tab3:
 
             st.markdown("##### Top 10 Branches (YTD)")
             st.dataframe(top_10_ytd.drop(columns=[c for c in top_10_ytd.columns if c.startswith("_")]), use_container_width=True)
-            
-            if branch_name_col in top_10_ytd.columns:
-                chart_df = top_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
-                chart_df.columns = ["Plan", "Actual"]
-                st.bar_chart(chart_df)
-                
-                for idx, row in top_10_ytd.iterrows():
-                    b_name = row[branch_name_col]
-                    p_val = row["_sort_ytd_plan"]
-                    a_val = row["_sort_ytd_act"]
-                    st.markdown(f"🔹 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
+            render_custom_altair_chart(top_10_ytd, "_sort_ytd_plan", "_sort_ytd_act", "Top 10 Branches - YTD Plan vs Actual")
 
             st.markdown("##### Least 10 Branches (YTD - Ascending)")
             st.dataframe(least_10_ytd.drop(columns=[c for c in least_10_ytd.columns if c.startswith("_")]), use_container_width=True)
-            
-            if branch_name_col in least_10_ytd.columns:
-                chart_df_least = least_10_ytd.set_index(branch_name_col)[["_sort_ytd_plan", "_sort_ytd_act"]]
-                chart_df_least.columns = ["Plan", "Actual"]
-                st.bar_chart(chart_df_least)
-                
-                for idx, row in least_10_ytd.iterrows():
-                    b_name = row[branch_name_col]
-                    p_val = row["_sort_ytd_plan"]
-                    a_val = row["_sort_ytd_act"]
-                    st.markdown(f"🔹 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
+            render_custom_altair_chart(least_10_ytd, "_sort_ytd_plan", "_sort_ytd_act", "Least 10 Branches - YTD Plan vs Actual")
 
         with col_t2:
             st.markdown("#### 📅 Monthly Performance Rankings & Charts")
@@ -320,31 +320,11 @@ with tab3:
 
             st.markdown("##### Top 10 Branches (Monthly)")
             st.dataframe(top_10_m.drop(columns=[c for c in top_10_m.columns if c.startswith("_")]), use_container_width=True)
-            
-            if branch_name_col in top_10_m.columns:
-                chart_df_m = top_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
-                chart_df_m.columns = ["Plan", "Actual"]
-                st.bar_chart(chart_df_m)
-                
-                for idx, row in top_10_m.iterrows():
-                    b_name = row[branch_name_col]
-                    p_val = row["_sort_m_plan"]
-                    a_val = row["_sort_m_act"]
-                    st.markdown(f"🔹 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
+            render_custom_altair_chart(top_10_m, "_sort_m_plan", "_sort_m_act", "Top 10 Branches - Monthly Plan vs Actual")
 
             st.markdown("##### Least 10 Branches (Monthly - Ascending)")
             st.dataframe(least_10_m.drop(columns=[c for c in least_10_m.columns if c.startswith("_")]), use_container_width=True)
-            
-            if branch_name_col in least_10_m.columns:
-                chart_df_m_least = least_10_m.set_index(branch_name_col)[["_sort_m_plan", "_sort_m_act"]]
-                chart_df_m_least.columns = ["Plan", "Actual"]
-                st.bar_chart(chart_df_m_least)
-                
-                for idx, row in least_10_m.iterrows():
-                    b_name = row[branch_name_col]
-                    p_val = row["_sort_m_plan"]
-                    a_val = row["_sort_m_act"]
-                    st.markdown(f"🔹 **{b_name}** ➔ <span style='color:{plan_color}; font-weight:bold;'>Plan: {p_val:,.0f}</span> | <span style='color:{actual_color}; font-weight:bold;'>Actual: {a_val:,.0f}</span>", unsafe_allow_html=True)
+            render_custom_altair_chart(least_10_m, "_sort_m_plan", "_sort_m_act", "Least 10 Branches - Monthly Plan vs Actual")
 
 with tab4:
     st.subheader("📄 Executive Narrative Report & Boardroom PPT Outline")
@@ -367,7 +347,7 @@ CERTIFIED BY EXECUTIVE PULSE AI | ENTERPRISE BANKING INTELLIGENCE
     ppt_outline = f"""
 SLIDE 1: INSTITUTIONAL PERFORMANCE ROLL-UP ({reporting_period})
 - Multi-variable consolidated summary table.
-- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Breakdown.
+- Comprehensive Visual Analytics: Top 10 & Least 10 Plan vs Actual Custom Charts.
 """
 
     col_r1, col_r2 = st.columns(2)
